@@ -15,7 +15,46 @@
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #0B1021;
+  color: white;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+
+.leaflet-popup-content-wrapper {
+  background: transparent;
+  box-shadow: none;
+}
+
+.leaflet-popup-tip {
+  background: #1a237e;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+.custom-popup .leaflet-popup-close-button {
+  color: white;
+}
+
+.leaflet-popup-content-wrapper {
+  background: transparent;
+  box-shadow: none;
+}
+
+.leaflet-popup-tip {
+  background: #1a237e;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+.custom-popup .leaflet-popup-close-button {
+  color: white;
 }
