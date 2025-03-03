@@ -5,34 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertTriangle, Wind, Droplets, Navigation, ThermometerSun } from 'lucide-react';
 import { getActiveHurricanes, getHurricaneObservations } from './noaaService';
+import AtlasCommandMap from './components/AtlasCommandMap';
 
-// Dynamically import map components with no SSR
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
-);
-
-const TileLayer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.TileLayer),
-  { ssr: false }
-);
-
-const Circle = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Circle),
-  { ssr: false }
-);
-
-const Popup = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Popup),
-  { ssr: false }
-);
-
-const Polyline = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Polyline),
-  { ssr: false }
-);
-
-// Rest of your component stays exactly the same
 export default function HurricaneTracker() {
   const [hurricanes, setHurricanes] = useState([]);
   const [selectedHurricane, setSelectedHurricane] = useState(null);
@@ -76,13 +50,17 @@ export default function HurricaneTracker() {
   const handleHurricaneSelect = async (hurricane) => {
     setSelectedHurricane(hurricane);
     if (hurricane.coordinates) {
-      const obs = await getHurricaneObservations(
-        hurricane.coordinates[1],
-        hurricane.coordinates[0]
-      );
-      setObservations(obs);
-      generateForecast(obs);
-      calculateRiskLevel(hurricane, obs);
+      try {
+        const obs = await getHurricaneObservations(
+          hurricane.coordinates[1],
+          hurricane.coordinates[0]
+        );
+        setObservations(obs);
+        generateForecast(obs);
+        calculateRiskLevel(hurricane, obs);
+      } catch (err) {
+        console.error("Error fetching observations:", err);
+      }
     }
   };
 
@@ -210,58 +188,11 @@ export default function HurricaneTracker() {
       <div className="grid grid-cols-3 gap-4">
         {/* Map */}
         <div className="col-span-2 bg-[#0d1424] rounded-lg overflow-hidden h-[calc(100vh-250px)]">
-          {typeof window !== 'undefined' && (
-            <MapContainer
-              center={selectedHurricane?.coordinates || [25, -80]}
-              zoom={6}
-              className="w-full h-full"
-              minZoom={2}
-              maxBounds={[[-90, -180], [90, 180]]}
-              maxBoundsViscosity={1.0}
-            >
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                noWrap={true}
-              />
-              
-              {hurricanes.map(hurricane => (
-                hurricane.coordinates && (
-                  <React.Fragment key={hurricane.id}>
-                    <Circle
-                      center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
-                      radius={100000}
-                      pathOptions={{
-                        color: hurricane.category > 0 ? '#ff4500' : '#ffd700',
-                        fillColor: hurricane.category > 0 ? '#ff4500' : '#ffd700',
-                        fillOpacity: 0.3
-                      }}
-                    >
-                      <Popup>
-                        <div className="bg-[#1a237e] text-white p-4 rounded-lg shadow-lg min-w-[200px]">
-                          <h3 className="font-bold text-lg mb-2">{hurricane.name}</h3>
-                          <div className="space-y-2">
-                            <p><span className="text-gray-400">Type:</span> {hurricane.type}</p>
-                            <p><span className="text-gray-400">Category:</span> {hurricane.category || 'TS'}</p>
-                            <p><span className="text-gray-400">Status:</span> {hurricane.status}</p>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Circle>
-                    <Polyline
-                      positions={getPredictedPath(hurricane)}
-                      pathOptions={{
-                        color: '#ff4500',
-                        weight: 2,
-                        opacity: 0.6,
-                        dashArray: '5, 10'
-                      }}
-                    />
-                  </React.Fragment>
-                )
-              ))}
-            </MapContainer>
-          )}
+          <AtlasCommandMap
+            hurricanes={hurricanes}
+            selectedHurricane={selectedHurricane}
+            onSelectHurricane={handleHurricaneSelect}
+          />
         </div>
 
         {/* Details Panel */}
