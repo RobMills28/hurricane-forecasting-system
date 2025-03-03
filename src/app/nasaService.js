@@ -72,7 +72,6 @@ export async function getGibsLayers() {
         title: 'MODIS Terra True Color',
         subtitle: 'Terra / MODIS',
         description: 'Combination of MODIS visible bands 1, 4, and 3',
-        wmtsUrl: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi',
         format: 'image/jpeg',
         tileMatrixSet: 'EPSG4326_250m',
         minZoom: 0,
@@ -83,7 +82,6 @@ export async function getGibsLayers() {
         title: 'Land Surface Temperature (Day)',
         subtitle: 'Terra / MODIS',
         description: 'Surface temperature during daytime',
-        wmtsUrl: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi',
         format: 'image/png',
         tileMatrixSet: 'EPSG4326_2km',
         minZoom: 0,
@@ -94,7 +92,6 @@ export async function getGibsLayers() {
         title: 'Sea Surface Temperature',
         subtitle: 'MUR',
         description: 'Global sea surface temperature composite',
-        wmtsUrl: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi',
         format: 'image/png',
         tileMatrixSet: 'EPSG4326_1km',
         minZoom: 0,
@@ -105,7 +102,6 @@ export async function getGibsLayers() {
         title: 'Earth at Night',
         subtitle: 'Suomi NPP / VIIRS',
         description: 'Earth at night visualizing light sources',
-        wmtsUrl: 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi',
         format: 'image/png',
         tileMatrixSet: 'EPSG4326_500m',
         minZoom: 0,
@@ -119,30 +115,11 @@ export async function getGibsLayers() {
 }
 
 /**
- * Generates a WMTS URL template for a NASA GIBS layer
+ * Gets the tile URL template for a NASA GIBS layer
  * 
  * @param {Object} layer - GIBS layer information
  * @returns {string} URL template for the WMTS layer
  */
-export function getGibsWmtsUrl(layer) {
-  return `${layer.wmtsUrl}?service=WMTS&request=GetTile&version=1.0.0&layer=${layer.id}&style=default&format=${encodeURIComponent(layer.format)}&tilematrixset=${layer.tileMatrixSet}&tilematrix={z}&tilerow={y}&tilecol={x}`;
-}
-
-/**
- * Gets the tile URL function for a NASA GIBS layer
- * 
- * @param {Object} layer - GIBS layer information
- * @returns {Function} Function that returns the URL for a specific tile
- */
-export function getGibsTileUrlFunction(layer) {
-  const template = getGibsWmtsUrl(layer);
-  
-  return (x, y, z) => {
-    // WMTS uses TileMatrix, TileCol, and TileRow
-    // Leaflet uses z, x, y
-    return template
-      .replace('{z}', z)
-      .replace('{x}', x)
-      .replace('{y}', y);
-  };
+export function getGibsUrlTemplate(layer) {
+  return `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?service=WMTS&request=GetTile&version=1.0.0&layer=${layer.id}&style=default&format=${encodeURIComponent(layer.format)}&tilematrixset=${layer.tileMatrixSet}&tilematrix={z}&tilerow={y}&tilecol={x}`;
 }

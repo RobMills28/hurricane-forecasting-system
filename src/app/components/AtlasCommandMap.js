@@ -3,7 +3,8 @@
 import 'leaflet/dist/leaflet.css';
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Layers } from 'lucide-react';
+import { getGibsLayers, getGibsUrlTemplate } from '../nasaService';
 
 // Dynamically import map components
 const MapContainer = dynamic(
@@ -39,6 +40,10 @@ const ZoomControl = dynamic(
 const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) => {
   const [animationFrame, setAnimationFrame] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const [nasaLayers, setNasaLayers] = useState([]);
+  const [activeBaseMap, setActiveBaseMap] = useState('dark');
+  const [activeNasaLayer, setActiveNasaLayer] = useState(null);
+  const [showLayerControl, setShowLayerControl] = useState(false);
   
   // Animation for pulsing effects
   useEffect(() => {
@@ -47,6 +52,20 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     }, 50);
     
     return () => clearInterval(interval);
+  }, []);
+  
+  // Fetch NASA GIBS layers
+  useEffect(() => {
+    const fetchNasaLayers = async () => {
+      try {
+        const layers = await getGibsLayers();
+        setNasaLayers(layers);
+      } catch (error) {
+        console.error('Error fetching NASA layers:', error);
+      }
+    };
+    
+    fetchNasaLayers();
   }, []);
   
   // Notify when map is ready
@@ -122,6 +141,22 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     return positions;
   };
 
+  // Toggle NASA layer selection panel
+  const toggleLayerControl = () => {
+    setShowLayerControl(!showLayerControl);
+  };
+
+  // Set active NASA layer
+  const handleLayerSelect = (layer) => {
+    setActiveNasaLayer(layer);
+    setShowLayerControl(false);
+  };
+  
+  // Toggle base map
+  const changeBaseMap = (mapType) => {
+    setActiveBaseMap(mapType);
+  };
+
   if (!mapReady) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-[#0d1424]">
@@ -145,12 +180,32 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       >
         <ZoomControl position="bottomright" />
         
-        {/* Base map layer - dark theme */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          noWrap={true}
-        />
+        {/* Base Maps */}
+        {activeBaseMap === 'dark' && (
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            noWrap={true}
+          />
+        )}
+        
+        {activeBaseMap === 'satellite' && (
+          <TileLayer
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution='Imagery &copy; Esri'
+            noWrap={true}
+          />
+        )}
+        
+        {/* NASA Layer */}
+        {activeNasaLayer && (
+          <TileLayer
+            url={getGibsUrlTemplate(activeNasaLayer)}
+            attribution={`NASA GIBS - ${activeNasaLayer.subtitle}`}
+            opacity={0.7}
+            noWrap={true}
+          />
+        )}
         
         {/* Hurricanes */}
         {hurricanes.map(hurricane => (
@@ -243,6 +298,71 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         ))}
       </MapContainer>
       
+      {/* Layer Controls Panel */}
+      <div className="absolute top-2 right-2 bg-[#1a237e] p-2 rounded-lg z-[1000] flex flex-col gap-2">
+        {/* Base Map Selection */}
+        <div className="flex gap-1">
+          <button 
+            onClick={() => changeBaseMap('dark')}
+            className={`px-2 py-1 rounded text-xs ${
+              activeBaseMap === 'dark' ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            Dark Map
+          </button>
+          <button 
+            onClick={() => changeBaseMap('satellite')}
+            className={`px-2 py-1 rounded text-xs ${
+              activeBaseMap === 'satellite' ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            Satellite
+          </button>
+        </div>
+        
+        {/* NASA Layer Button */}
+        <button 
+          onClick={toggleLayerControl}
+          className="flex items-center gap-1 px-2 py-1 rounded bg-[#0b1021] text-white hover:bg-[#2a3890] transition-colors text-xs"
+        >
+          <Layers className="h-4 w-4" />
+          <span>NASA Layers</span>
+        </button>
+      </div>
+      
+      {/* NASA Layer Selection Panel */}
+      {showLayerControl && (
+        <div className="absolute top-24 right-2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] max-w-[250px] max-h-[400px] overflow-y-auto">
+          <h4 className="text-sm font-bold mb-2 text-white">NASA Earth Observation</h4>
+          <div className="space-y-2">
+            {nasaLayers.map(layer => (
+              <button
+                key={layer.id}
+                onClick={() => handleLayerSelect(layer)}
+                className={`w-full text-left p-2 rounded text-xs ${
+                  activeNasaLayer?.id === layer.id 
+                    ? 'bg-[#1a237e] text-white' 
+                    : 'bg-[#162040] text-gray-300 hover:bg-[#1a237e]/50'
+                }`}
+              >
+                <div className="font-bold">{layer.title}</div>
+                <div className="text-xs opacity-70">{layer.description}</div>
+              </button>
+            ))}
+            
+            {/* Clear Layer Option */}
+            {activeNasaLayer && (
+              <button
+                onClick={() => setActiveNasaLayer(null)}
+                className="w-full text-left p-2 rounded text-xs bg-[#3e1a1a] text-gray-300 hover:bg-[#641f1f]"
+              >
+                <div className="font-bold">Clear NASA Layer</div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Legend */}
       <div className="absolute bottom-2 right-2 bg-[#0b1021]/70 text-white p-3 rounded-lg z-[1000]">
         <h4 className="text-xs font-bold mb-2">Hurricane Categories</h4>
@@ -273,6 +393,17 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           </div>
         </div>
       </div>
+      
+      {/* NASA Data Credit */}
+      {activeNasaLayer && (
+        <div className="absolute bottom-36 right-2 bg-[#0b1021]/70 text-white p-2 rounded-lg z-[1000]">
+          <h4 className="text-xs font-bold mb-1">Active NASA Layer</h4>
+          <div className="text-xs">
+            <p>{activeNasaLayer.title}</p>
+            <p className="text-xs opacity-70">{activeNasaLayer.subtitle}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
