@@ -6,6 +6,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { AlertTriangle, Wind, Droplets, Navigation, ThermometerSun } from 'lucide-react';
 import { getActiveHurricanes, getHurricaneObservations } from './noaaService';
 import AtlasCommandMap from './components/AtlasCommandMap';
+import HurricanePrediction from './components/HurricanePrediction';
+import { getNasaImagery, getGibsLayers } from './nasaService';
+
 
 export default function HurricaneTracker() {
   const [hurricanes, setHurricanes] = useState([]);
@@ -221,6 +224,12 @@ export default function HurricaneTracker() {
                   </div>
                 </div>
               )}
+
+              {/* AI Prediction Component */}
+              <HurricanePrediction 
+                selectedHurricane={selectedHurricane} 
+                nasaService={{ getNasaImagery, getGibsLayers }}
+              />
 
               {/* Intensity Forecast */}
               <div className="bg-[#1a237e] p-4 rounded-lg">
