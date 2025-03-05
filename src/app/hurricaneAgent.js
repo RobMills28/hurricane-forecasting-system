@@ -314,81 +314,89 @@ class HurricaneEnvironment {
     // Calculate average position and intensity errors
     const errors = this.history.map(record => {
       if (!record.actual) return null;
-      
+    
+    // Safely calculate position error
       const posError = this.calculateDistance(
         record.prediction.position,
         record.actual.position
       );
-      
+    
+    // Safely calculate intensity error
       const intensityError = Math.abs(
-        record.prediction.windSpeed - record.actual.windSpeed
+        (record.prediction.windSpeed || 0) - (record.actual.windSpeed || 0)
       );
-      
+    
+    // Safely calculate pressure error
       const pressureError = Math.abs(
-        record.prediction.pressure - record.actual.pressure
+        (record.prediction.pressure || 1000) - (record.actual.pressure || 1000)
       );
-      
-      // Calculate error by forecast period
+    
+    // Calculate error by forecast period
       const timeStep = record.timeStep;
       const forecastHour = timeStep * 6; // Assuming 6-hour time steps
-      
+    
       let forecastPeriod;
       if (forecastHour <= 24) forecastPeriod = '24h';
       else if (forecastHour <= 48) forecastPeriod = '48h';
       else if (forecastHour <= 72) forecastPeriod = '72h';
       else if (forecastHour <= 96) forecastPeriod = '96h';
       else forecastPeriod = '120h';
-      
+    
       return { 
-        posError, 
-        intensityError, 
-        pressureError,
+        posError: isNaN(posError) ? 0 : posError, 
+        intensityError: isNaN(intensityError) ? 0 : intensityError, 
+        pressureError: isNaN(pressureError) ? 0 : pressureError,
         forecastHour,
         forecastPeriod
       };
     }).filter(error => error !== null);
-    
+  
+  // Default values if no valid errors
     if (errors.length === 0) {
       return { 
-        avgPosError: Infinity, 
-        avgIntensityError: Infinity,
+        avgPosError: 0, 
+        avgIntensityError: 0,
+        avgPressureError: 0,
         byForecastPeriod: {}
       };
     }
-    
-    // Overall averages
-    const avgPosError = errors.reduce((sum, err) => sum + err.posError, 0) / errors.length;
-    const avgIntensityError = errors.reduce((sum, err) => sum + err.intensityError, 0) / errors.length;
-    const avgPressureError = errors.reduce((sum, err) => sum + err.pressureError, 0) / errors.length;
-    
-    // Group by forecast period
+  
+  // Safely calculate averages
+    const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+    const safeAvg = (arr) => arr.length > 0 ? sum(arr) / arr.length : 0;
+  
+  // Calculate overall averages - prevent NaN
+    const avgPosError = safeAvg(errors.map(e => e.posError));
+    const avgIntensityError = safeAvg(errors.map(e => e.intensityError));
+    const avgPressureError = safeAvg(errors.map(e => e.pressureError));
+  
+  // Group by forecast period with safety checks
     const byForecastPeriod = {};
     const periods = ['24h', '48h', '72h', '96h', '120h'];
-    
+  
     periods.forEach(period => {
       const periodErrors = errors.filter(err => err.forecastPeriod === period);
       if (periodErrors.length === 0) {
         byForecastPeriod[period] = null;
         return;
       }
-      
+    
       byForecastPeriod[period] = {
         count: periodErrors.length,
-        avgPosError: periodErrors.reduce((sum, err) => sum + err.posError, 0) / periodErrors.length,
-        avgIntensityError: periodErrors.reduce((sum, err) => sum + err.intensityError, 0) / periodErrors.length,
-        avgPressureError: periodErrors.reduce((sum, err) => sum + err.pressureError, 0) / periodErrors.length
+        avgPosError: safeAvg(periodErrors.map(e => e.posError)),
+        avgIntensityError: safeAvg(periodErrors.map(e => e.intensityError)),
+        avgPressureError: safeAvg(periodErrors.map(e => e.pressureError))
       };
     });
-    
+  
     return { 
-      avgPosError, 
-      avgIntensityError,
-      avgPressureError,
+      avgPosError: isNaN(avgPosError) ? 0 : avgPosError, 
+      avgIntensityError: isNaN(avgIntensityError) ? 0 : avgIntensityError,
+      avgPressureError: isNaN(avgPressureError) ? 0 : avgPressureError,
       byForecastPeriod
     };
   }
 }
-
 /**
  * Advanced Hurricane Prediction Agent using ensemble methods
  * and basin-specific models

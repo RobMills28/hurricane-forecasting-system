@@ -11,40 +11,65 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
   const [showEnsemble, setShowEnsemble] = useState(true);
   const [showUncertainty, setShowUncertainty] = useState(true);
   
+  // Safe value checking
+  const safePredictions = Array.isArray(predictions) ? predictions : [];
+  const safeEnsemblePredictions = Array.isArray(ensemblePredictions) ? ensemblePredictions : [];
+  const safeStatistics = statistics || {};
+  
   // Format data for the combined intensity chart
   const prepareIntensityData = () => {
-    if (!predictions || !statistics) return [];
+    if (!safePredictions.length) return [];
     
-    return predictions.map(pred => {
+    return safePredictions.map(pred => {
       const day = pred.day;
-      const stats = statistics[day] || {};
+      const stats = safeStatistics[day] || {};
+      const windSpeed = typeof pred.windSpeed === 'number' ? pred.windSpeed : 0;
+      
+      // Make sure we have valid numbers for all values
+      const low = stats.intensity?.range?.[0] || windSpeed * 0.8;
+      const high = stats.intensity?.range?.[1] || windSpeed * 1.2;
+      const confidence = stats.confidence || 50;
       
       return {
-        day,
-        windSpeed: pred.windSpeed,
-        low: stats.intensity?.range?.[0] || pred.windSpeed * 0.8,
-        high: stats.intensity?.range?.[1] || pred.windSpeed * 1.2,
-        confidence: stats.confidence
+        day: day || 0,
+        windSpeed: windSpeed || 0,
+        low: isNaN(low) ? 0 : low,
+        high: isNaN(high) ? 0 : high,
+        confidence: isNaN(confidence) ? 50 : confidence,
+        category: pred.category || 'TS'
       };
     });
   };
   
   // Format ensemble data for visualization
   const prepareEnsembleData = () => {
-    if (!ensemblePredictions || ensemblePredictions.length === 0) return [];
+    if (!safeEnsemblePredictions.length) return [];
     
     // Flatten ensemble tracks for visualization
-    return ensemblePredictions.flatMap((ensemble, ensembleIndex) => 
-      ensemble.map(point => ({
-        ...point,
-        ensembleId: ensembleIndex
-      }))
-    );
+    const flatData = [];
+    
+    safeEnsemblePredictions.forEach((ensemble, ensembleIndex) => {
+      if (!Array.isArray(ensemble)) return;
+      
+      ensemble.forEach(point => {
+        // Validate point data
+        if (!point || typeof point !== 'object') return;
+        
+        flatData.push({
+          ...point,
+          day: point.day || 0,
+          windSpeed: typeof point.windSpeed === 'number' ? point.windSpeed : 0,
+          ensembleId: ensembleIndex
+        });
+      });
+    });
+    
+    return flatData;
   };
   
   // Format data for hurricane categories
   const prepareCategoryData = () => {
-    if (!predictions) return [];
+    if (!safePredictions.length) return [];
     
     const categories = {
       'TS': { min: 39, max: 73, color: '#5DA5DA', label: 'Tropical Storm' },
@@ -55,19 +80,21 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
       '5': { min: 157, max: 200, color: '#FF5050', label: 'Category 5' }
     };
     
-    return predictions.map(pred => {
-      const categoryStat = statistics?.[pred.day]?.category || {};
+    return safePredictions.map(pred => {
+      const day = pred.day || 0;
+      const categoryStat = safeStatistics[day]?.category || {};
       const catRange = categoryStat.range || []; 
       const minCat = typeof catRange[0] === 'string' ? catRange[0] : String(catRange[0] || '0');
       const maxCat = typeof catRange[1] === 'string' ? catRange[1] : String(catRange[1] || '0');
+      const category = pred.category || 'TS';
       
       // Define category colors
-      const catInfo = categories[pred.category] || categories['TS'];
+      const catInfo = categories[category] || categories['TS'];
         
       return {
-        day: pred.day,
-        windSpeed: pred.windSpeed,
-        category: pred.category,
+        day,
+        windSpeed: typeof pred.windSpeed === 'number' ? pred.windSpeed : 0,
+        category,
         minCategory: minCat,
         maxCategory: maxCat,
         categoryColor: catInfo.color,
@@ -78,14 +105,25 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
   
   // Prepare confidence visualization
   const prepareConfidenceData = () => {
-    if (!statistics) return [];
+    if (!safeStatistics || typeof safeStatistics !== 'object') return [];
     
-    return Object.entries(statistics).map(([day, stat]) => ({
-      day: parseInt(day),
-      confidence: stat.confidence || 50,
-      positionConfidence: stat.position?.confidence || 50,
-      intensityConfidence: stat.intensity?.confidence || 50
-    }));
+    return Object.entries(safeStatistics).map(([day, stat]) => {
+      if (!stat || typeof stat !== 'object') {
+        return {
+          day: parseInt(day) || 0,
+          confidence: 50,
+          positionConfidence: 50,
+          intensityConfidence: 50
+        };
+      }
+      
+      return {
+        day: parseInt(day) || 0,
+        confidence: typeof stat.confidence === 'number' ? stat.confidence : 50,
+        positionConfidence: typeof stat.position?.confidence === 'number' ? stat.position.confidence : 50,
+        intensityConfidence: typeof stat.intensity?.confidence === 'number' ? stat.intensity.confidence : 50
+      };
+    });
   };
   
   const intensityData = prepareIntensityData();
@@ -101,16 +139,24 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
       return (
         <div className="bg-[#1a237e] text-white p-3 rounded-lg shadow-lg text-xs">
           <p className="font-bold">Day {label}</p>
-          <p>Wind Speed: {Math.round(data.windSpeed)} mph</p>
-          <p>Range: {Math.round(data.low)} - {Math.round(data.high)} mph</p>
-          <p>Confidence: {Math.round(data.confidence)}%</p>
-          <p>Category: {data.category}</p>
+          <p>Wind Speed: {Math.round(data.windSpeed || 0)} mph</p>
+          <p>Range: {Math.round(data.low || 0)} - {Math.round(data.high || 0)} mph</p>
+          <p>Confidence: {Math.round(data.confidence || 0)}%</p>
+          <p>Category: {data.category || 'TS'}</p>
         </div>
       );
     }
   
     return null;
   };
+  
+  if (!safePredictions.length) {
+    return (
+      <div className="text-sm text-center text-gray-400 py-4">
+        No forecast data available
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-4">
@@ -195,8 +241,8 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
               )}
               
               {/* Ensemble lines */}
-              {showEnsemble && ensemblePredictions && ensemblePredictions.length > 0 && 
-                ensemblePredictions.map((_, index) => (
+              {showEnsemble && safeEnsemblePredictions.length > 0 && 
+                Array.from({ length: Math.min(safeEnsemblePredictions.length, 15) }).map((_, index) => (
                   <Line
                     key={`ensemble-${index}`}
                     data={ensembleData.filter(d => d.ensembleId === index)}
