@@ -7,6 +7,11 @@ import {
 } from 'recharts';
 import { Wind, AlertCircle, ChevronDown, ChevronUp, BarChart4, TrendingUp } from 'lucide-react';
 
+// Utility function to safely handle potentially NaN values
+const safeNumber = (value, fallback = 0) => {
+  return typeof value === 'number' && !isNaN(value) ? value : fallback;
+};
+
 const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics }) => {
   const [showEnsemble, setShowEnsemble] = useState(true);
   const [showUncertainty, setShowUncertainty] = useState(true);
@@ -21,21 +26,21 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
     if (!safePredictions.length) return [];
     
     return safePredictions.map(pred => {
-      const day = pred.day;
+      const day = safeNumber(pred.day, 0);
       const stats = safeStatistics[day] || {};
-      const windSpeed = typeof pred.windSpeed === 'number' ? pred.windSpeed : 0;
+      const windSpeed = safeNumber(pred.windSpeed, 0);
       
       // Make sure we have valid numbers for all values
-      const low = stats.intensity?.range?.[0] || windSpeed * 0.8;
-      const high = stats.intensity?.range?.[1] || windSpeed * 1.2;
-      const confidence = stats.confidence || 50;
+      const low = safeNumber(stats.intensity?.range?.[0], windSpeed * 0.8);
+      const high = safeNumber(stats.intensity?.range?.[1], windSpeed * 1.2);
+      const confidence = safeNumber(stats.confidence, 50);
       
       return {
-        day: day || 0,
-        windSpeed: windSpeed || 0,
-        low: isNaN(low) ? 0 : low,
-        high: isNaN(high) ? 0 : high,
-        confidence: isNaN(confidence) ? 50 : confidence,
+        day: day,
+        windSpeed: windSpeed,
+        low: low,
+        high: high,
+        confidence: confidence,
         category: pred.category || 'TS'
       };
     });
@@ -57,8 +62,8 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
         
         flatData.push({
           ...point,
-          day: point.day || 0,
-          windSpeed: typeof point.windSpeed === 'number' ? point.windSpeed : 0,
+          day: safeNumber(point.day, 0),
+          windSpeed: safeNumber(point.windSpeed, 0),
           ensembleId: ensembleIndex
         });
       });
@@ -81,7 +86,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
     };
     
     return safePredictions.map(pred => {
-      const day = pred.day || 0;
+      const day = safeNumber(pred.day, 0);
       const categoryStat = safeStatistics[day]?.category || {};
       const catRange = categoryStat.range || []; 
       const minCat = typeof catRange[0] === 'string' ? catRange[0] : String(catRange[0] || '0');
@@ -93,7 +98,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
         
       return {
         day,
-        windSpeed: typeof pred.windSpeed === 'number' ? pred.windSpeed : 0,
+        windSpeed: safeNumber(pred.windSpeed, 0),
         category,
         minCategory: minCat,
         maxCategory: maxCat,
@@ -119,9 +124,9 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
       
       return {
         day: parseInt(day) || 0,
-        confidence: typeof stat.confidence === 'number' ? stat.confidence : 50,
-        positionConfidence: typeof stat.position?.confidence === 'number' ? stat.position.confidence : 50,
-        intensityConfidence: typeof stat.intensity?.confidence === 'number' ? stat.intensity.confidence : 50
+        confidence: safeNumber(stat.confidence, 50),
+        positionConfidence: safeNumber(stat.position?.confidence, 50),
+        intensityConfidence: safeNumber(stat.intensity?.confidence, 50)
       };
     });
   };
@@ -139,9 +144,9 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
       return (
         <div className="bg-[#1a237e] text-white p-3 rounded-lg shadow-lg text-xs">
           <p className="font-bold">Day {label}</p>
-          <p>Wind Speed: {Math.round(data.windSpeed || 0)} mph</p>
-          <p>Range: {Math.round(data.low || 0)} - {Math.round(data.high || 0)} mph</p>
-          <p>Confidence: {Math.round(data.confidence || 0)}%</p>
+          <p>Wind Speed: {Math.round(safeNumber(data.windSpeed, 0))} mph</p>
+          <p>Range: {Math.round(safeNumber(data.low, 0))} - {Math.round(safeNumber(data.high, 0))} mph</p>
+          <p>Confidence: {Math.round(safeNumber(data.confidence, 0))}%</p>
           <p>Category: {data.category || 'TS'}</p>
         </div>
       );

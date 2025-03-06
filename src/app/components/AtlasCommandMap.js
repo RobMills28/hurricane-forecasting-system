@@ -1,7 +1,7 @@
 'use client';
 
 import 'leaflet/dist/leaflet.css';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, Layers } from 'lucide-react';
 import { getGibsLayers, getGibsUrlTemplate } from '../nasaService';
@@ -9,7 +9,14 @@ import { getGibsLayers, getGibsUrlTemplate } from '../nasaService';
 // Dynamically import map components
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-[#0d1424]">
+        <div className="bg-[#0d1424] w-full h-full"></div>
+      </div>
+    )
+  }
 );
 
 const TileLayer = dynamic(
@@ -37,6 +44,16 @@ const ZoomControl = dynamic(
   { ssr: false }
 );
 
+// For preloading layers
+const preloadImage = (url) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(url);
+    img.onerror = () => reject(new Error(`Failed to preload ${url}`));
+    img.src = url;
+  });
+};
+
 const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) => {
   const [animationFrame, setAnimationFrame] = useState(0);
   const [mapReady, setMapReady] = useState(false);
@@ -45,6 +62,18 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   const [activeNasaLayer, setActiveNasaLayer] = useState(null);
   const [showLayerControl, setShowLayerControl] = useState(false);
   
+  // Keep both base maps loaded but control opacity
+  const [darkMapOpacity, setDarkMapOpacity] = useState(1);
+  const [satelliteMapOpacity, setSatelliteMapOpacity] = useState(0);
+  const [nasaLayerOpacity, setNasaLayerOpacity] = useState(0);
+  const [previousNasaLayer, setPreviousNasaLayer] = useState(null);
+  
+  // For tile preloading
+  const [preloadedUrls, setPreloadedUrls] = useState(new Set());
+  
+  // Reference to the map container
+  const mapRef = useRef(null);
+  
   // Animation for pulsing effects
   useEffect(() => {
     const interval = setInterval(() => {
@@ -52,6 +81,29 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     }, 50);
     
     return () => clearInterval(interval);
+  }, []);
+  
+  // Pre-load common tile URLs for smoother first appearance
+  useEffect(() => {
+    const preloadTiles = async () => {
+      try {
+        // The most common zoom level tiles for initial view
+        const darkMapUrl = 'https://a.basemaps.cartocdn.com/dark_all/5/8/12.png';
+        const satelliteMapUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/12/8';
+        
+        // Preload these tiles
+        await Promise.all([
+          preloadImage(darkMapUrl),
+          preloadImage(satelliteMapUrl)
+        ]);
+        
+        setPreloadedUrls(prev => new Set([...prev, darkMapUrl, satelliteMapUrl]));
+      } catch (error) {
+        console.error('Failed to preload tiles:', error);
+      }
+    };
+    
+    preloadTiles();
   }, []);
   
   // Fetch NASA GIBS layers
@@ -68,12 +120,35 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     fetchNasaLayers();
   }, []);
   
-  // Notify when map is ready
+  // Handle map's initial ready state with a consistent approach
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setMapReady(true);
+      // Add the main background color to body to prevent any white flashing
+      document.body.style.backgroundColor = '#0d1424';
+      // Set a short timeout to ensure consistent timing
+      const timer = setTimeout(() => {
+        setMapReady(true);
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
   }, []);
+  
+  // Transition logic for NASA layer changes
+  useEffect(() => {
+    if (activeNasaLayer) {
+      // When a new layer is selected, fade it in
+      setNasaLayerOpacity(0.7);
+    } else {
+      // When layer is removed, fade it out
+      setNasaLayerOpacity(0);
+    }
+    
+    // Remember the previous layer for smooth transitions
+    if (activeNasaLayer) {
+      setPreviousNasaLayer(activeNasaLayer);
+    }
+  }, [activeNasaLayer]);
   
   // Get hurricane color based on category
   const getHurricaneColor = (hurricane) => {
@@ -148,62 +223,101 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
 
   // Set active NASA layer
   const handleLayerSelect = (layer) => {
-    setActiveNasaLayer(layer);
+    // If removing layer
+    if (layer === null) {
+      setNasaLayerOpacity(0);
+      // After fade-out, remove the layer
+      setTimeout(() => {
+        setActiveNasaLayer(null);
+      }, 500);
+    } else {
+      // If changing layer, set new one first, then fade in
+      setActiveNasaLayer(layer);
+      requestAnimationFrame(() => {
+        setNasaLayerOpacity(0.7);
+      });
+    }
     setShowLayerControl(false);
   };
   
-  // Toggle base map
+  // Toggle base map using cross-fade approach
   const changeBaseMap = (mapType) => {
+    if (mapType === activeBaseMap) return;
+    
+    if (mapType === 'dark') {
+      // First increase dark map opacity
+      setDarkMapOpacity(1);
+      // After a short delay, decrease satellite opacity
+      setTimeout(() => {
+        setSatelliteMapOpacity(0);
+      }, 50);
+    } else if (mapType === 'satellite') {
+      // First increase satellite opacity
+      setSatelliteMapOpacity(1);
+      // After a short delay, decrease dark map opacity
+      setTimeout(() => {
+        setDarkMapOpacity(0);
+      }, 50);
+    }
     setActiveBaseMap(mapType);
   };
 
+  // Render a consistent loading state
   if (!mapReady) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-[#0d1424]">
-        <p>Loading map...</p>
+      <div className="w-full h-full bg-[#0d1424]">
+        <div className="w-full h-full flex items-center justify-center bg-[#0d1424]">
+          <p className="text-white">Loading map...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative bg-[#0d1424]">
       <MapContainer
         center={selectedHurricane?.coordinates ? 
           [selectedHurricane.coordinates[1], selectedHurricane.coordinates[0]] : 
           [25, -80]}
         zoom={5}
         className="w-full h-full"
+        style={{ background: '#0d1424' }}
         minZoom={2}
         maxBounds={[[-90, -180], [90, 180]]}
         maxBoundsViscosity={1.0}
         zoomControl={false}
+        ref={mapRef}
+        attributionControl={false}
       >
         <ZoomControl position="bottomright" />
         
-        {/* Base Maps */}
-        {activeBaseMap === 'dark' && (
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            noWrap={true}
-          />
-        )}
+        {/* Always include both base maps but control opacity via state */}
+        {/* Dark base map */}
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          noWrap={true}
+          opacity={darkMapOpacity}
+          className="transition-opacity duration-700"
+        />
         
-        {activeBaseMap === 'satellite' && (
-          <TileLayer
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            attribution='Imagery &copy; Esri'
-            noWrap={true}
-          />
-        )}
+        {/* Satellite base map */}
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          attribution='Imagery &copy; Esri'
+          noWrap={true}
+          opacity={satelliteMapOpacity}
+          className="transition-opacity duration-700"
+        />
         
-        {/* NASA Layer */}
-        {activeNasaLayer && (
+        {/* NASA Layer - maintained with opacity transitions */}
+        {(activeNasaLayer || previousNasaLayer) && (
           <TileLayer
-            url={getGibsUrlTemplate(activeNasaLayer)}
-            attribution={`NASA GIBS - ${activeNasaLayer.subtitle}`}
-            opacity={0.7}
+            url={getGibsUrlTemplate(activeNasaLayer || previousNasaLayer)}
+            attribution={`NASA GIBS - ${(activeNasaLayer || previousNasaLayer).subtitle}`}
+            opacity={nasaLayerOpacity}
             noWrap={true}
+            className="transition-opacity duration-700" 
           />
         )}
         
@@ -304,7 +418,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         <div className="flex gap-1">
           <button 
             onClick={() => changeBaseMap('dark')}
-            className={`px-2 py-1 rounded text-xs ${
+            className={`px-2 py-1 rounded text-xs transition-colors ${
               activeBaseMap === 'dark' ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
             }`}
           >
@@ -312,7 +426,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           </button>
           <button 
             onClick={() => changeBaseMap('satellite')}
-            className={`px-2 py-1 rounded text-xs ${
+            className={`px-2 py-1 rounded text-xs transition-colors ${
               activeBaseMap === 'satellite' ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
             }`}
           >
@@ -339,7 +453,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
               <button
                 key={layer.id}
                 onClick={() => handleLayerSelect(layer)}
-                className={`w-full text-left p-2 rounded text-xs ${
+                className={`w-full text-left p-2 rounded text-xs transition-colors ${
                   activeNasaLayer?.id === layer.id 
                     ? 'bg-[#1a237e] text-white' 
                     : 'bg-[#162040] text-gray-300 hover:bg-[#1a237e]/50'
@@ -353,8 +467,8 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
             {/* Clear Layer Option */}
             {activeNasaLayer && (
               <button
-                onClick={() => setActiveNasaLayer(null)}
-                className="w-full text-left p-2 rounded text-xs bg-[#3e1a1a] text-gray-300 hover:bg-[#641f1f]"
+                onClick={() => handleLayerSelect(null)}
+                className="w-full text-left p-2 rounded text-xs bg-[#3e1a1a] text-gray-300 hover:bg-[#641f1f] transition-colors"
               >
                 <div className="font-bold">Clear NASA Layer</div>
               </button>

@@ -1,11 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Wind, AlertCircle, ChevronDown, ChevronUp, BarChart4, TrendingUp, Info } from 'lucide-react';
 import { HurricaneEnvironment, HurricanePredictionAgent } from '../hurricaneAgent';
 import { fetchHistoricalHurricaneData, preprocessDataForTraining } from '../hurricaneData';
 import EnsembleVisualization from './EnsembleVisualization';
+
+// Utility function to safely handle potentially NaN values
+const safeNumber = (value, fallback = 0) => {
+  return typeof value === 'number' && !isNaN(value) ? value : fallback;
+};
+
+// Custom transition component that maintains DOM structure during loading
+const TransitionWrapper = ({ children, isLoading, className = '' }) => {
+  return (
+    <div className={`relative transition-opacity duration-300 ${className}`} 
+      style={{ opacity: isLoading ? 0 : 1 }}>
+      {children}
+      {isLoading && (
+        <div className="absolute inset-0 bg-[#1a237e] z-10" />
+      )}
+    </div>
+  );
+};
 
 const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
   const [agent, setAgent] = useState(null);
@@ -19,9 +37,22 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [dataError, setDataError] = useState(null);
+  const [isVisualLoading, setIsVisualLoading] = useState(false);
+  
+  // Maintain cached content for smoother transitions
+  const [cachedContent, setCachedContent] = useState({
+    forecast: null,
+    ensemble: null,
+    performance: null
+  });
+  
+  // Reference to the component mount status
+  const isMounted = useRef(false);
 
   // Initialize agent when component mounts
   useEffect(() => {
+    isMounted.current = true;
+    
     async function initializeAgent() {
       try {
         if (agent) return; // Only initialize once
@@ -37,6 +68,9 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         if (!historicalData || historicalData.length === 0) {
           throw new Error('Failed to load hurricane data');
         }
+        
+        // Make sure we're still mounted before continuing
+        if (!isMounted.current) return;
         
         setLoadingMessage(`Processing ${historicalData.length} historical cyclones...`);
         const processedData = preprocessDataForTraining(historicalData);
@@ -59,6 +93,11 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         
         // Set up progress updates
         const progressInterval = setInterval(() => {
+          if (!isMounted.current) {
+            clearInterval(progressInterval);
+            return;
+          }
+          
           setTrainingProgress(prev => {
             if (prev >= 95) {
               clearInterval(progressInterval);
@@ -71,6 +110,12 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         try {
           const trainingPerformance = await newAgent.train(environment, episodes);
           
+          // Make sure we're still mounted before updating state
+          if (!isMounted.current) {
+            clearInterval(progressInterval);
+            return;
+          }
+          
           clearInterval(progressInterval);
           setTrainingProgress(100);
           setTrainingStatus('ready');
@@ -79,9 +124,9 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
           // Process and display performance metrics
           const periodicPerformance = trainingPerformance.map((p, i) => ({
             episode: i + 1,
-            positionError: p.avgPosError,
-            intensityError: p.avgIntensityError,
-            pressureError: p.avgPressureError || 0
+            positionError: safeNumber(p.avgPosError),
+            intensityError: safeNumber(p.avgIntensityError),
+            pressureError: safeNumber(p.avgPressureError, 0)
           }));
           
           // Get performance by forecast period
@@ -89,29 +134,123 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
           
           setPerformance({
             overall: periodicPerformance,
-            lastPositionError: trainingPerformance[trainingPerformance.length - 1]?.avgPosError || 0,
-            lastIntensityError: trainingPerformance[trainingPerformance.length - 1]?.avgIntensityError || 0,
+            lastPositionError: safeNumber(trainingPerformance[trainingPerformance.length - 1]?.avgPosError, 0),
+            lastIntensityError: safeNumber(trainingPerformance[trainingPerformance.length - 1]?.avgIntensityError, 0),
             byForecastPeriod: perfByPeriod
           });
         } catch (trainingError) {
           console.error('Error during training:', trainingError);
-          clearInterval(progressInterval);
-          setDataError('Training failed: ' + trainingError.message);
-          setTrainingStatus('error');
+          if (isMounted.current) {
+            clearInterval(progressInterval);
+            setDataError('Training failed: ' + trainingError.message);
+            setTrainingStatus('error');
+          }
         }
       } catch (error) {
         console.error('Error initializing prediction agent:', error);
-        setDataError('Initialization failed: ' + error.message);
-        setTrainingStatus('error');
+        if (isMounted.current) {
+          setDataError('Initialization failed: ' + error.message);
+          setTrainingStatus('error');
+        }
       }
     }
     
     initializeAgent();
+    
+    // Cleanup on unmount
+    return () => {
+      isMounted.current = false;
+    };
   }, [agent, nasaService]);
+
+  // Helper function to render forecast content - used for caching
+  const renderForecastContent = () => {
+    return (
+      <>
+        {renderForecastTable()}
+        
+        {/* Basin Information */}
+        {selectedHurricane?.coordinates && (
+          <div className="mb-4 p-2 bg-[#2a3890]/50 rounded-lg text-xs">
+            <p className="flex items-center gap-1">
+              <span className="text-gray-300">Basin:</span> 
+              <span className="font-bold">{getBasinFromCoordinates(selectedHurricane.coordinates)}</span>
+              <span className="text-gray-300 ml-1">
+                ({getBasinFullName(getBasinFromCoordinates(selectedHurricane.coordinates))})
+              </span>
+            </p>
+          </div>
+        )}
+        
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="mt-2 mb-4 text-xs flex items-center gap-1 text-gray-300 hover:text-white"
+        >
+          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          <span>{showDetails ? 'Hide' : 'Show'} Forecast Details</span>
+        </button>
+        
+        {showDetails && (
+          <div className="space-y-1 text-xs text-gray-300 mb-4">
+            <p>• Prediction uses historical tropical cyclone tracks from IBTrACS</p>
+            <p>• Basin-specific model adjustments for regional patterns</p>
+            <p>• Sea surface temperature influence on intensification</p>
+            <p>• Ensemble of 15 prediction models for uncertainty estimation</p>
+          </div>
+        )}
+        
+        {/* Use EnsembleVisualization component for better visualization */}
+        <EnsembleVisualization 
+          predictions={predictions}
+          ensemblePredictions={ensemblePredictions}
+          statistics={forecastStatistics}
+        />
+      </>
+    );
+  };
+
+  // Pre-generate content for each tab to avoid reflows during tab switches
+  useEffect(() => {
+    if (predictions.length > 0) {
+      if (!cachedContent.forecast) {
+        setCachedContent(prev => ({
+          ...prev,
+          forecast: renderForecastContent()
+        }));
+      }
+      
+      if (!cachedContent.ensemble) {
+        setCachedContent(prev => ({
+          ...prev,
+          ensemble: (
+            <EnsembleVisualization 
+              predictions={predictions}
+              ensemblePredictions={ensemblePredictions}
+              statistics={forecastStatistics}
+            />
+          )
+        }));
+      }
+      
+      if (!cachedContent.performance && performance) {
+        setCachedContent(prev => ({
+          ...prev,
+          performance: renderPerformanceMetrics()
+        }));
+      }
+    }
+  }, [predictions, ensemblePredictions, forecastStatistics, performance]);
 
   // Generate predictions when selected hurricane changes
   useEffect(() => {
     if (!agent || !selectedHurricane || trainingStatus !== 'ready') return;
+    
+    // Don't show loading state immediately to prevent flicker on fast operations
+    const loadingTimer = setTimeout(() => {
+      if (isMounted.current) {
+        setIsVisualLoading(true);
+      }
+    }, 50);
     
     try {
       // Create prediction for the selected hurricane
@@ -140,14 +279,14 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         
         // Calculate uncertainty ranges (increasing with time)
         const uncertaintyFactor = 1 + (day * 0.15);
-        const category = getHurricaneCategory(prediction.windSpeed);
+        const category = getHurricaneCategory(safeNumber(prediction.windSpeed));
         
         newPredictions.push({
           day,
           timestamp,
           position: prediction.position,
-          windSpeed: prediction.windSpeed,
-          pressure: prediction.pressure,
+          windSpeed: safeNumber(prediction.windSpeed),
+          pressure: safeNumber(prediction.pressure),
           category,
           uncertainty: prediction.uncertainty,
           confidence: Math.max(95 - (day * 15), 40)
@@ -158,8 +297,8 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         predictState = {
           ...predictState,
           position: prediction.position,
-          windSpeed: prediction.windSpeed,
-          pressure: prediction.pressure
+          windSpeed: safeNumber(prediction.windSpeed),
+          pressure: safeNumber(prediction.pressure)
         };
       }
       
@@ -168,9 +307,32 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
       // Generate ensemble predictions
       generateEnsemblePredictions(currentState, forecastDays);
       
+      // Clear loading state after content is ready
+      clearTimeout(loadingTimer);
+      
+      // Reset cache to force re-rendering with new data
+      setCachedContent({
+        forecast: null,
+        ensemble: null,
+        performance: null
+      });
+      
+      // Allow a little time for DOM updates before removing loading state
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (isMounted.current) {
+            setIsVisualLoading(false);
+          }
+        }, 100);
+      });
+      
     } catch (error) {
       console.error('Error generating predictions:', error);
+      clearTimeout(loadingTimer);
+      setIsVisualLoading(false);
     }
+    
+    return () => clearTimeout(loadingTimer);
   }, [agent, selectedHurricane, trainingStatus]);
   
   // Generate ensemble predictions for visualization
@@ -195,18 +357,18 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
           
           ensemblePath.push({
             day,
-            windSpeed: prediction.windSpeed,
-            pressure: prediction.pressure,
+            windSpeed: safeNumber(prediction.windSpeed),
+            pressure: safeNumber(prediction.pressure),
             position: prediction.position,
-            category: getHurricaneCategory(prediction.windSpeed)
+            category: getHurricaneCategory(safeNumber(prediction.windSpeed))
           });
           
           ensembleHistory.push({ state: ensembleState, action: prediction });
           ensembleState = {
             ...ensembleState,
             position: prediction.position,
-            windSpeed: prediction.windSpeed,
-            pressure: prediction.pressure
+            windSpeed: safeNumber(prediction.windSpeed),
+            pressure: safeNumber(prediction.pressure)
           };
         }
         
@@ -216,11 +378,13 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
       setEnsemblePredictions(ensembles);
       
       // Calculate forecast statistics including uncertainty
-      const statistics = agent.getForecastStatistics(
-        ensembles.flat().concat(predictions)
-      );
-      
-      setForecastStatistics(statistics);
+      if (agent.getForecastStatistics) {
+        const statistics = agent.getForecastStatistics(
+          ensembles.flat().concat(predictions)
+        );
+        
+        setForecastStatistics(statistics);
+      }
       
     } catch (error) {
       console.error('Error generating ensemble predictions:', error);
@@ -254,6 +418,148 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
     // Default to North Atlantic if uncertain
     return 'NA';
   };
+  
+  // Handle tab switching with smooth transitions
+  const switchTab = (tab) => {
+    // Don't reload the current tab
+    if (tab === activeTab) return;
+    
+    // Start a brief loading transition
+    setIsVisualLoading(true);
+    
+    // Set the tab after a short delay to allow the fade-out to complete
+    setTimeout(() => {
+      setActiveTab(tab);
+      
+      // End the loading state with a short delay to prevent flash
+      setTimeout(() => {
+        setIsVisualLoading(false);
+      }, 50);
+    }, 150);
+  };
+
+  // Render forecast table
+  const renderForecastTable = () => {
+    return (
+      <div className="mb-4">
+        <h4 className="text-sm font-bold mb-2">5-Day Forecast</h4>
+        <div className="space-y-2 text-xs">
+          {predictions.map(pred => (
+            <div key={pred.day} className="flex justify-between items-center">
+              <span>Day {pred.day}:</span>
+              <div className="flex gap-4">
+                <span className="text-gray-300">
+                  {safeNumber(pred.position.lat).toFixed(1)}°N, {Math.abs(safeNumber(pred.position.lon)).toFixed(1)}°W
+                </span>
+                <span>
+                  Cat {pred.category} ({Math.round(safeNumber(pred.windSpeed))} mph)
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Render performance metrics
+  const renderPerformanceMetrics = () => {
+    if (!performance) return null;
+    
+    return (
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-sm font-bold mb-2 flex items-center gap-1">
+            <BarChart4 className="h-4 w-4" />
+            <span>Model Performance</span>
+          </h4>
+          <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
+            <div className="bg-[#162040] p-2 rounded-lg">
+              <div className="text-gray-400">Position Error</div>
+              <div className="text-lg font-bold">{safeNumber(performance.lastPositionError).toFixed(2)} km</div>
+            </div>
+            <div className="bg-[#162040] p-2 rounded-lg">
+              <div className="text-gray-400">Intensity Error</div>
+              <div className="text-lg font-bold">{safeNumber(performance.lastIntensityError).toFixed(2)} mph</div>
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <h4 className="text-sm font-bold mb-2">Error by Forecast Period</h4>
+            <div className="space-y-1 text-xs">
+              {Object.entries(performance.byForecastPeriod || {}).map(([period, data]) => (
+                data && (
+                  <div key={period} className="grid grid-cols-3 bg-[#162040] p-2 rounded-lg">
+                    <div>
+                      <span className="text-gray-400">Period:</span> {period}
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Position:</span> {safeNumber(data.avgPosError).toFixed(1)} km
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Intensity:</span> {safeNumber(data.avgIntensityError).toFixed(1)} mph
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          </div>
+          
+          <div className="h-48 mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={performance.overall}
+                margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a4858" />
+                <XAxis 
+                  dataKey="episode" 
+                  label={{ value: 'Training Episode', position: 'insideBottom', offset: -5 }}
+                  stroke="#fff" 
+                />
+                <YAxis 
+                  label={{ value: 'Error', angle: -90, position: 'insideLeft' }} 
+                  stroke="#fff" 
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1a237e',
+                    border: 'none',
+                    borderRadius: '4px'
+                  }}
+                  formatter={(value) => safeNumber(value).toFixed(2)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={(dataPoint) => safeNumber(dataPoint.positionError)}
+                  name="Position Error (km)"
+                  stroke="#29b6f6"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={(dataPoint) => safeNumber(dataPoint.intensityError)}
+                  name="Intensity Error (mph)"
+                  stroke="#f44336"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        
+        <div className="mt-4 text-xs text-gray-400">
+          <p className="font-bold">Model Details:</p>
+          <p>• Trained on global IBTrACS historical storm data</p>
+          <p>• Ensemble of 15 specialized prediction models</p>
+          <p>• Basin-specific parameters for regional accuracy</p>
+          <p>• Environmental factors including sea surface temperature</p>
+        </div>
+      </div>
+    );
+  };
 
   // Main render based on status
   if (trainingStatus === 'loading' || trainingStatus === 'training') {
@@ -264,7 +570,7 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
           <p className="mb-2">{loadingMessage}</p>
           <div className="w-full bg-[#0B1021] h-2 mt-2 rounded-full overflow-hidden">
             <div 
-              className="bg-blue-500 h-full" 
+              className="bg-blue-500 h-full transition-all duration-300" 
               style={{ width: `${trainingProgress}%` }}
             ></div>
           </div>
@@ -298,128 +604,6 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
     );
   }
 
-  // Render forecast table
-  const renderForecastTable = () => {
-    return (
-      <div className="mb-4">
-        <h4 className="text-sm font-bold mb-2">5-Day Forecast</h4>
-        <div className="space-y-2 text-xs">
-          {predictions.map(pred => (
-            <div key={pred.day} className="flex justify-between items-center">
-              <span>Day {pred.day}:</span>
-              <div className="flex gap-4">
-                <span className="text-gray-300">
-                  {pred.position.lat.toFixed(1)}°N, {Math.abs(pred.position.lon).toFixed(1)}°W
-                </span>
-                <span>
-                  Cat {pred.category} ({Math.round(pred.windSpeed)} mph)
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // Render performance metrics
-  const renderPerformanceMetrics = () => {
-    if (!performance) return null;
-    
-    return (
-      <div className="space-y-4">
-        <div>
-          <h4 className="text-sm font-bold mb-2 flex items-center gap-1">
-            <BarChart4 className="h-4 w-4" />
-            <span>Model Performance</span>
-          </h4>
-          <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
-            <div className="bg-[#162040] p-2 rounded-lg">
-              <div className="text-gray-400">Position Error</div>
-              <div className="text-lg font-bold">{performance.lastPositionError.toFixed(2)} km</div>
-            </div>
-            <div className="bg-[#162040] p-2 rounded-lg">
-              <div className="text-gray-400">Intensity Error</div>
-              <div className="text-lg font-bold">{performance.lastIntensityError.toFixed(2)} mph</div>
-            </div>
-          </div>
-          
-          <div className="mt-4">
-            <h4 className="text-sm font-bold mb-2">Error by Forecast Period</h4>
-            <div className="space-y-1 text-xs">
-              {Object.entries(performance.byForecastPeriod || {}).map(([period, data]) => (
-                data && (
-                  <div key={period} className="grid grid-cols-3 bg-[#162040] p-2 rounded-lg">
-                    <div>
-                      <span className="text-gray-400">Period:</span> {period}
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Position:</span> {data.avgPosError.toFixed(1)} km
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Intensity:</span> {data.avgIntensityError.toFixed(1)} mph
-                    </div>
-                  </div>
-                )
-              ))}
-            </div>
-          </div>
-          
-          <div className="h-48 mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={performance.overall}
-                margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a4858" />
-                <XAxis 
-                  dataKey="episode" 
-                  label={{ value: 'Training Episode', position: 'insideBottom', offset: -5 }}
-                  stroke="#fff" 
-                />
-                <YAxis 
-                  label={{ value: 'Error', angle: -90, position: 'insideLeft' }} 
-                  stroke="#fff" 
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a237e',
-                    border: 'none',
-                    borderRadius: '4px'
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="positionError"
-                  name="Position Error (km)"
-                  stroke="#29b6f6"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="intensityError"
-                  name="Intensity Error (mph)"
-                  stroke="#f44336"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        
-        <div className="mt-4 text-xs text-gray-400">
-          <p className="font-bold">Model Details:</p>
-          <p>• Trained on global IBTrACS historical storm data</p>
-          <p>• Ensemble of 15 specialized prediction models</p>
-          <p>• Basin-specific parameters for regional accuracy</p>
-          <p>• Environmental factors including sea surface temperature</p>
-        </div>
-      </div>
-    );
-  };
-
   // Ready status with predictions
   return (
     <div className="bg-[#1a237e] p-4 rounded-lg">
@@ -427,24 +611,24 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         <span>Global Hurricane AI Forecast</span>
         <div className="flex gap-2">
           <button
-            onClick={() => setActiveTab('forecast')}
-            className={`text-xs px-2 py-1 rounded ${
+            onClick={() => switchTab('forecast')}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
               activeTab === 'forecast' ? 'bg-[#2a3890]' : 'bg-[#0b1021]/40'
             }`}
           >
             Forecast
           </button>
           <button
-            onClick={() => setActiveTab('ensemble')}
-            className={`text-xs px-2 py-1 rounded ${
+            onClick={() => switchTab('ensemble')}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
               activeTab === 'ensemble' ? 'bg-[#2a3890]' : 'bg-[#0b1021]/40'
             }`}
           >
             Ensemble
           </button>
           <button
-            onClick={() => setActiveTab('performance')}
-            className={`text-xs px-2 py-1 rounded ${
+            onClick={() => switchTab('performance')}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
               activeTab === 'performance' ? 'bg-[#2a3890]' : 'bg-[#0b1021]/40'
             }`}
           >
@@ -453,66 +637,41 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
         </div>
       </h3>
       
-      {predictions.length > 0 ? (
-        <>
-          {activeTab === 'forecast' && (
-            <>
-              {renderForecastTable()}
-              
-              {/* Basin Information */}
-              {selectedHurricane?.coordinates && (
-                <div className="mb-4 p-2 bg-[#2a3890]/50 rounded-lg text-xs">
-                  <p className="flex items-center gap-1">
-                    <span className="text-gray-300">Basin:</span> 
-                    <span className="font-bold">{getBasinFromCoordinates(selectedHurricane.coordinates)}</span>
-                    <span className="text-gray-300 ml-1">
-                      ({getBasinFullName(getBasinFromCoordinates(selectedHurricane.coordinates))})
-                    </span>
-                  </p>
-                </div>
-              )}
-              
-              <button
-                onClick={() => setShowDetails(!showDetails)}
-                className="mt-2 mb-4 text-xs flex items-center gap-1 text-gray-300 hover:text-white"
-              >
-                {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                <span>{showDetails ? 'Hide' : 'Show'} Forecast Details</span>
-              </button>
-              
-              {showDetails && (
-                <div className="space-y-1 text-xs text-gray-300 mb-4">
-                  <p>• Prediction uses historical tropical cyclone tracks from IBTrACS</p>
-                  <p>• Basin-specific model adjustments for regional patterns</p>
-                  <p>• Sea surface temperature influence on intensification</p>
-                  <p>• Ensemble of 15 prediction models for uncertainty estimation</p>
-                </div>
-              )}
-              
-              {/* Use EnsembleVisualization component for better visualization */}
-              <EnsembleVisualization 
-                predictions={predictions}
-                ensemblePredictions={ensemblePredictions}
-                statistics={forecastStatistics}
-              />
-            </>
-          )}
-          
-          {activeTab === 'ensemble' && (
-            <EnsembleVisualization 
-              predictions={predictions}
-              ensemblePredictions={ensemblePredictions}
-              statistics={forecastStatistics}
-            />
-          )}
-          
-          {activeTab === 'performance' && renderPerformanceMetrics()}
-        </>
-      ) : (
-        <div className="text-center py-4">
-          <p>Select a hurricane to view AI forecast</p>
-        </div>
-      )}
+      {/* Main content with fade transitions */}
+      <TransitionWrapper isLoading={isVisualLoading}>
+        {predictions.length > 0 ? (
+          <div className="min-h-[200px] bg-[#1a237e]">
+            {/* Pre-rendered content that is maintained during transitions */}
+            {activeTab === 'forecast' && (
+              <div className="transition-opacity duration-300">
+                {cachedContent.forecast || renderForecastContent()}
+              </div>
+            )}
+            
+            {activeTab === 'ensemble' && (
+              <div className="transition-opacity duration-300">
+                {cachedContent.ensemble || (
+                  <EnsembleVisualization 
+                    predictions={predictions}
+                    ensemblePredictions={ensemblePredictions}
+                    statistics={forecastStatistics}
+                  />
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'performance' && (
+              <div className="transition-opacity duration-300">
+                {cachedContent.performance || renderPerformanceMetrics()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 bg-[#1a237e]">
+            <p>Select a hurricane to view AI forecast</p>
+          </div>
+        )}
+      </TransitionWrapper>
     </div>
   );
 };
