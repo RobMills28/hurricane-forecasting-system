@@ -165,7 +165,30 @@ function processIBTraCSRecords(records) {
     };
   });
   
-  return processedHurricanes;
+  // Ensure all hurricane IDs are unique by adding a suffix if needed
+  const uniqueIdMap = new Map();
+  const uniqueHurricanes = [];
+  
+  processedHurricanes.forEach(hurricane => {
+    let uniqueId = hurricane.id;
+    
+    // Check if we've seen this ID before
+    if (uniqueIdMap.has(uniqueId)) {
+      const count = uniqueIdMap.get(uniqueId) + 1;
+      uniqueIdMap.set(uniqueId, count);
+      uniqueId = `${hurricane.id}-${count}`;
+    } else {
+      uniqueIdMap.set(uniqueId, 1);
+    }
+    
+    // Create a copy with the unique ID
+    uniqueHurricanes.push({
+      ...hurricane,
+      id: uniqueId
+    });
+  });
+  
+  return uniqueHurricanes;
 }
 
 /**

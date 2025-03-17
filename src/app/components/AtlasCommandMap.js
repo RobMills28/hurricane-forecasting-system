@@ -3,8 +3,9 @@
 import 'leaflet/dist/leaflet.css';
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Layers } from 'lucide-react';
+import { AlertTriangle, Layers, Search, Clock, Filter, Info } from 'lucide-react';
 import { getGibsLayers, getGibsUrlTemplate } from '../nasaService';
+import { useMap } from 'react-leaflet';
 
 // Dynamically import map components
 const MapContainer = dynamic(
@@ -24,6 +25,11 @@ const TileLayer = dynamic(
   { ssr: false }
 );
 
+const CircleMarker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.CircleMarker),
+  { ssr: false }
+);
+
 const Circle = dynamic(
   () => import('react-leaflet').then((mod) => mod.Circle),
   { ssr: false }
@@ -31,6 +37,11 @@ const Circle = dynamic(
 
 const Popup = dynamic(
   () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+);
+
+const Tooltip = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Tooltip),
   { ssr: false }
 );
 
@@ -61,6 +72,14 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   const [activeBaseMap, setActiveBaseMap] = useState('dark');
   const [activeNasaLayer, setActiveNasaLayer] = useState(null);
   const [showLayerControl, setShowLayerControl] = useState(false);
+  const [showForecastPaths, setShowForecastPaths] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterCategory, setFilterCategory] = useState(null);
+  const [filterRegion, setFilterRegion] = useState(null);
+  const [currentTimelineValue, setCurrentTimelineValue] = useState(0);
+  const [showTimeline, setShowTimeline] = useState(false);
   
   // Keep both base maps loaded but control opacity
   const [darkMapOpacity, setDarkMapOpacity] = useState(1);
@@ -73,6 +92,35 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   
   // Reference to the map container
   const mapRef = useRef(null);
+  
+  // Component to handle map clicks for deselection
+  const MapClickHandler = () => {
+    const map = useMap();
+    
+    useEffect(() => {
+      if (!map) return;
+      
+      const handleMapClick = (e) => {
+        // Don't deselect if clicking on a marker or popup
+        if (e.originalEvent.target.classList.contains('leaflet-marker-icon') ||
+            e.originalEvent.target.closest('.leaflet-popup')) {
+          return;
+        }
+        // Deselect the hurricane
+        if (selectedHurricane) {
+          onSelectHurricane(null);
+        }
+      };
+      
+      map.on('click', handleMapClick);
+      
+      return () => {
+        map.off('click', handleMapClick);
+      };
+    }, [map, selectedHurricane]);
+    
+    return null;
+  };
   
   // Animation for pulsing effects
   useEffect(() => {
@@ -150,12 +198,36 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     }
   }, [activeNasaLayer]);
   
+  // Filter hurricanes based on search and filters
+  const getFilteredHurricanes = () => {
+    if (!hurricanes) return [];
+    
+    return hurricanes.filter(hurricane => {
+      // Search by name
+      if (searchQuery && !hurricane.name?.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      
+      // Filter by category
+      if (filterCategory !== null && hurricane.category !== filterCategory) {
+        return false;
+      }
+      
+      // Filter by region/basin
+      if (filterRegion && hurricane.basin !== filterRegion) {
+        return false;
+      }
+      
+      return true;
+    });
+  };
+  
   // Get hurricane color based on category
   const getHurricaneColor = (hurricane) => {
     const category = hurricane.category || 0;
     
     const colors = {
-      0: '#5DA5DA', // Tropical Depression / Tropical Storm (blue)
+      0: '#5DA5DA', // Tropical Storm / Depression (blue)
       1: '#4DC4FF', // Category 1 (lighter blue)
       2: '#4DFFEA', // Category 2 (cyan)
       3: '#FFDE33', // Category 3 (yellow)
@@ -166,19 +238,41 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     return colors[category] || colors[0];
   };
   
-  // Generate size based on category for visualization
-  const getHurricaneSize = (hurricane) => {
-    const baseSize = 80000; // 80km base radius for tropical storm
-    const category = hurricane.category || 0;
-    const sizeMultiplier = 1 + (category * 0.25); // Size increases with category
+  // Get marker size based on category and selection
+  const getMarkerSize = (hurricane) => {
+    // Base size is slightly larger for higher categories
+    const baseSize = 5 + (hurricane.category || 0);
     
-    // Add subtle pulsing effect based on animation frame
-    const pulseEffect = 1 + (Math.sin(animationFrame * 0.05) * 0.1);
+    // Make selected hurricane slightly larger
+    if (selectedHurricane?.id === hurricane.id) {
+      return baseSize + 2;
+    }
     
-    return baseSize * sizeMultiplier * (selectedHurricane?.id === hurricane.id ? pulseEffect : 1);
+    return baseSize;
   };
   
-  // Generate trajectory prediction (can be enhanced with real forecast data)
+  // Get marker opacity based on selection
+  const getMarkerOpacity = (hurricane) => {
+    // Make selected hurricane fully opaque
+    if (selectedHurricane?.id === hurricane.id) {
+      return 1;
+    }
+    
+    // If a hurricane is selected, make others more transparent
+    if (selectedHurricane && selectedHurricane.id !== hurricane.id) {
+      return 0.5;
+    }
+    
+    // Default opacity varies slightly based on category for visual hierarchy
+    return 0.7 + ((hurricane.category || 0) * 0.05);
+  };
+  
+  // Get stroke width based on selection
+  const getStrokeWidth = (hurricane) => {
+    return selectedHurricane?.id === hurricane.id ? 2 : 1;
+  };
+
+  // Generate trajectory prediction
   const getPredictedPath = (hurricane) => {
     if (!hurricane.coordinates) return [];
     
@@ -186,7 +280,6 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     const positions = [[lat, lon]];
     
     // Create a forecast track that curves based on location
-    // Northern hemisphere hurricanes tend to curve northeast
     const isNorthernHemisphere = lat > 0;
     
     // Movement parameters
@@ -219,6 +312,49 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   // Toggle NASA layer selection panel
   const toggleLayerControl = () => {
     setShowLayerControl(!showLayerControl);
+    
+    // Close other panels when opening this one
+    if (!showLayerControl) {
+      setShowSearch(false);
+      setShowFilters(false);
+      setShowTimeline(false);
+    }
+  };
+  
+  // Toggle search panel
+  const toggleSearch = () => {
+    setShowSearch(!showSearch);
+    
+    // Close other panels when opening this one
+    if (!showSearch) {
+      setShowLayerControl(false);
+      setShowFilters(false);
+      setShowTimeline(false);
+    }
+  };
+  
+  // Toggle filters panel
+  const toggleFilters = () => {
+    setShowFilters(!showFilters);
+    
+    // Close other panels when opening this one
+    if (!showFilters) {
+      setShowLayerControl(false);
+      setShowSearch(false);
+      setShowTimeline(false);
+    }
+  };
+  
+  // Toggle timeline
+  const toggleTimeline = () => {
+    setShowTimeline(!showTimeline);
+    
+    // Close other panels when opening this one
+    if (!showTimeline) {
+      setShowLayerControl(false);
+      setShowSearch(false);
+      setShowFilters(false);
+    }
   };
 
   // Set active NASA layer
@@ -238,6 +374,11 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       });
     }
     setShowLayerControl(false);
+  };
+  
+  // Toggle forecast paths view
+  const toggleForecastPaths = () => {
+    setShowForecastPaths(!showForecastPaths);
   };
   
   // Toggle base map using cross-fade approach
@@ -273,6 +414,9 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     );
   }
 
+  // Get filtered hurricanes
+  const filteredHurricanes = getFilteredHurricanes();
+
   return (
     <div className="w-full h-full relative bg-[#0d1424]">
       <MapContainer
@@ -290,9 +434,9 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         attributionControl={false}
       >
         <ZoomControl position="bottomright" />
+        <MapClickHandler />
         
-        {/* Always include both base maps but control opacity via state */}
-        {/* Dark base map */}
+        {/* Base maps with opacity control */}
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -301,7 +445,6 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           className="transition-opacity duration-700"
         />
         
-        {/* Satellite base map */}
         <TileLayer
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           attribution='Imagery &copy; Esri'
@@ -310,7 +453,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           className="transition-opacity duration-700"
         />
         
-        {/* NASA Layer - maintained with opacity transitions */}
+        {/* NASA Layer with opacity transitions */}
         {(activeNasaLayer || previousNasaLayer) && (
           <TileLayer
             url={getGibsUrlTemplate(activeNasaLayer || previousNasaLayer)}
@@ -322,88 +465,78 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         )}
         
         {/* Hurricanes */}
-        {hurricanes.map(hurricane => (
+        {filteredHurricanes.map(hurricane => (
           hurricane.coordinates && (
             <React.Fragment key={hurricane.id}>
-              {/* Main hurricane visualization */}
-              <Circle
+              {/* Main hurricane marker */}
+              <CircleMarker
                 center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
-                radius={getHurricaneSize(hurricane)}
+                radius={getMarkerSize(hurricane)}
                 pathOptions={{
-                  color: getHurricaneColor(hurricane),
+                  color: '#ffffff',
+                  weight: getStrokeWidth(hurricane),
                   fillColor: getHurricaneColor(hurricane),
-                  fillOpacity: 0.3,
-                  weight: 2
+                  fillOpacity: getMarkerOpacity(hurricane)
                 }}
                 eventHandlers={{
                   click: () => onSelectHurricane(hurricane)
                 }}
               >
-                <Popup className="custom-popup">
-                  <div className="bg-[#1a237e] text-white p-4 rounded-lg shadow-lg min-w-[200px]">
-                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-yellow-400" />
-                      {hurricane.name}
-                    </h3>
-                    <div className="space-y-2">
-                      <p><span className="text-gray-400">Type:</span> {hurricane.type}</p>
-                      <p><span className="text-gray-400">Category:</span> {hurricane.category || 'TS'}</p>
-                      <p><span className="text-gray-400">Status:</span> {hurricane.status || 'Active'}</p>
-                      <p><span className="text-gray-400">Area:</span> {hurricane.areas}</p>
-                    </div>
+                {/* Tooltip on hover */}
+                <Tooltip 
+                  direction="top" 
+                  offset={[0, -5]} 
+                  opacity={0.9} 
+                  className="custom-tooltip"
+                >
+                  <div className="px-2 py-1">
+                    <p className="font-bold">{hurricane.name}</p>
+                    <p className="text-sm">Category: {hurricane.category || 'TS'}</p>
                   </div>
-                </Popup>
-              </Circle>
+                </Tooltip>
+              </CircleMarker>
               
-              {/* Hurricane eye */}
-              <Circle
-                center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
-                radius={10000} // 10km for the eye
-                pathOptions={{
-                  color: '#ffffff',
-                  fillColor: '#ffffff',
-                  fillOpacity: 0.7,
-                  weight: 1
-                }}
-              />
-              
-              {/* Forecast track for selected hurricane */}
-              {selectedHurricane?.id === hurricane.id && (
+              {/* Forecast path polyline for selected or when "Show Forecast Paths" is enabled */}
+              {(showForecastPaths || selectedHurricane?.id === hurricane.id) && (
                 <Polyline
                   positions={getPredictedPath(hurricane)}
                   pathOptions={{
-                    color: '#ffffff',
-                    weight: 2.5,
-                    opacity: 0.7,
-                    dashArray: '10, 10'
+                    color: getHurricaneColor(hurricane),
+                    weight: 2,
+                    opacity: selectedHurricane?.id === hurricane.id ? 0.9 : 0.6,
+                    dashArray: '5, 5'
                   }}
                 />
               )}
               
-              {/* Forecast points */}
+              {/* Forecast points along the path */}
               {selectedHurricane?.id === hurricane.id && 
                 getPredictedPath(hurricane).map((point, index) => {
                   if (index === 0) return null; // Skip the current position
                   
                   return (
-                    <Circle
+                    <CircleMarker
                       key={`forecast-${hurricane.id}-${index}`}
                       center={point}
-                      radius={10000}
+                      radius={3} // Small dot for forecast points
                       pathOptions={{
                         color: '#ffffff',
                         fillColor: getHurricaneColor(hurricane),
-                        fillOpacity: 0.8,
-                        weight: 1.5
+                        fillOpacity: 0.8 - (index * 0.1), // Decreasing opacity for further predictions
+                        weight: 1
                       }}
                     >
-                      <Popup className="custom-popup">
-                        <div className="bg-[#1a237e] text-white p-2 rounded shadow">
-                          <p className="font-bold">{hurricane.name}</p>
-                          <p>Forecast: +{index * 24}h</p>
+                      <Tooltip 
+                        direction="top" 
+                        offset={[0, -3]} 
+                        opacity={0.9}
+                        permanent={false}
+                      >
+                        <div className="px-2 py-1">
+                          <p className="text-sm font-bold">+{index * 24}h Forecast</p>
                         </div>
-                      </Popup>
-                    </Circle>
+                      </Tooltip>
+                    </CircleMarker>
                   );
                 })
               }
@@ -412,7 +545,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         ))}
       </MapContainer>
       
-      {/* Layer Controls Panel */}
+      {/* Control Panel */}
       <div className="absolute top-2 right-2 bg-[#1a237e] p-2 rounded-lg z-[1000] flex flex-col gap-2">
         {/* Base Map Selection */}
         <div className="flex gap-1">
@@ -434,13 +567,65 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           </button>
         </div>
         
-        {/* NASA Layer Button */}
+        {/* Layer Controls */}
+        <div className="grid grid-cols-2 gap-1">
+          {/* NASA Layers Button */}
+          <button 
+            onClick={toggleLayerControl}
+            className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              showLayerControl ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            <span className="hidden sm:inline">Layers</span>
+          </button>
+          
+          {/* Search Button */}
+          <button 
+            onClick={toggleSearch}
+            className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              showSearch ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            <Search className="h-4 w-4" />
+            <span className="hidden sm:inline">Search</span>
+          </button>
+          
+          {/* Filters Button */}
+          <button 
+            onClick={toggleFilters}
+            className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              showFilters ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            <Filter className="h-4 w-4" />
+            <span className="hidden sm:inline">Filter</span>
+          </button>
+          
+          {/* Timeline Button */}
+          <button 
+            onClick={toggleTimeline}
+            className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              showTimeline ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+            }`}
+          >
+            <Clock className="h-4 w-4" />
+            <span className="hidden sm:inline">Timeline</span>
+          </button>
+        </div>
+        
+        {/* Show Forecast Paths Button */}
         <button 
-          onClick={toggleLayerControl}
-          className="flex items-center gap-1 px-2 py-1 rounded bg-[#0b1021] text-white hover:bg-[#2a3890] transition-colors text-xs"
+          onClick={toggleForecastPaths}
+          className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+            showForecastPaths ? 'bg-[#2a3890] text-white' : 'bg-[#0b1021] text-gray-300'
+          }`}
         >
-          <Layers className="h-4 w-4" />
-          <span>NASA Layers</span>
+          {showForecastPaths ? (
+            <span>Hide Forecast Paths</span>
+          ) : (
+            <span>Show Forecast Paths</span>
+          )}
         </button>
       </div>
       
@@ -473,6 +658,128 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
                 <div className="font-bold">Clear NASA Layer</div>
               </button>
             )}
+          </div>
+        </div>
+      )}
+      
+      {/* Search Panel */}
+      {showSearch && (
+        <div className="absolute top-24 right-2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[250px]">
+          <h4 className="text-sm font-bold mb-2 text-white">Search Hurricanes</h4>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name..."
+            className="w-full p-2 bg-[#162040] text-white rounded border border-[#2a4858] text-sm"
+          />
+          
+          {searchQuery && (
+            <div className="mt-2">
+              <p className="text-xs text-gray-300">Found {filteredHurricanes.length} results</p>
+              
+              {filteredHurricanes.length > 0 && (
+                <div className="mt-2 max-h-[200px] overflow-y-auto">
+                  {filteredHurricanes.map(hurricane => (
+                    <button
+                      key={hurricane.id}
+                      onClick={() => {
+                        onSelectHurricane(hurricane);
+                        setShowSearch(false);
+                      }}
+                      className="w-full text-left p-2 rounded text-xs hover:bg-[#1a237e] mb-1 flex items-center"
+                    >
+                      <div 
+                        className="w-3 h-3 rounded-full mr-2" 
+                        style={{ backgroundColor: getHurricaneColor(hurricane) }}
+                      ></div>
+                      <span>{hurricane.name}</span>
+                      <span className="ml-auto">{hurricane.category || 'TS'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="absolute top-24 right-2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[250px]">
+          <h4 className="text-sm font-bold mb-2 text-white">Filter Hurricanes</h4>
+          
+          {/* Category Filter */}
+          <div className="mb-3">
+            <p className="text-xs text-gray-300 mb-1">Category</p>
+            <div className="grid grid-cols-3 gap-1">
+              {[0, 1, 2, 3, 4, 5].map(category => (
+                <button
+                  key={category}
+                  onClick={() => setFilterCategory(filterCategory === category ? null : category)}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    filterCategory === category 
+                      ? 'bg-[#1a237e] text-white' 
+                      : 'bg-[#162040] text-gray-300'
+                  }`}
+                >
+                  {category === 0 ? 'TS' : category}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Region Filter */}
+          <div className="mb-3">
+            <p className="text-xs text-gray-300 mb-1">Basin</p>
+            <div className="grid grid-cols-2 gap-1">
+              {['NA', 'EP', 'WP', 'NI', 'SI', 'SP'].map(basin => (
+                <button
+                  key={basin}
+                  onClick={() => setFilterRegion(filterRegion === basin ? null : basin)}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    filterRegion === basin 
+                      ? 'bg-[#1a237e] text-white' 
+                      : 'bg-[#162040] text-gray-300'
+                  }`}
+                >
+                  {basin}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Clear Filters */}
+          <button
+            onClick={() => {
+              setFilterCategory(null);
+              setFilterRegion(null);
+            }}
+            className="w-full text-center p-2 rounded text-xs bg-[#3e1a1a] text-gray-300 hover:bg-[#641f1f] transition-colors"
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
+      
+      {/* Timeline Slider */}
+      {showTimeline && (
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[80%] max-w-[600px]">
+          <h4 className="text-sm font-bold mb-2 text-white text-center">Hurricane Timeline</h4>
+          
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={currentTimelineValue}
+            onChange={(e) => setCurrentTimelineValue(parseInt(e.target.value))}
+            className="w-full"
+          />
+          
+          <div className="flex justify-between text-xs text-gray-300 mt-1">
+            <span>Past</span>
+            <span>Today</span>
+            <span>Future</span>
           </div>
         </div>
       )}
@@ -515,6 +822,26 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           <div className="text-xs">
             <p>{activeNasaLayer.title}</p>
             <p className="text-xs opacity-70">{activeNasaLayer.subtitle}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Filter/Search Indicator */}
+      {(searchQuery || filterCategory !== null || filterRegion) && (
+        <div className="absolute top-2 left-2 bg-[#1a237e] p-2 rounded-lg z-[1000]">
+          <div className="flex items-center gap-2 text-xs">
+            <Filter className="h-4 w-4 text-yellow-400" />
+            <span>Filters Applied</span>
+            <button 
+              onClick={() => {
+                setSearchQuery('');
+                setFilterCategory(null);
+                setFilterRegion(null);
+              }}
+              className="text-red-400 hover:text-red-300"
+            >
+              Clear
+            </button>
           </div>
         </div>
       )}
