@@ -3,8 +3,13 @@
 import dynamic from 'next/dynamic';
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { AlertTriangle, Wind, Droplets, Navigation, ThermometerSun, ChevronDown, ChevronUp, Info, Share, Download, Eye, ArrowUpRight, BarChart4 } from 'lucide-react';
+import { AlertTriangle, Wind, Droplets, Navigation, ThermometerSun, ChevronDown, ChevronUp, Info, Share, Download, Eye, ArrowUpRight, BarChart4, Globe } from 'lucide-react';
 import { getActiveHurricanes, getHurricaneObservations } from './noaaService';
+import { 
+  getActiveHurricanesByRegion, 
+  getOpenMeteoObservations, 
+  getRegionalForecast 
+} from './openMeteoService';
 import AtlasCommandMap from './components/AtlasCommandMap';
 import HurricanePrediction from './components/HurricanePrediction';
 import { getNasaImagery, getGibsLayers } from './nasaService';
@@ -24,40 +29,71 @@ export default function HurricaneTracker() {
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('24h');
   const [satelliteImagery, setSatelliteImagery] = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
+  const [dataSource, setDataSource] = useState('all'); // 'us', 'japan', 'australia', 'all'
 
   // Fetch initial data
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const data = await getActiveHurricanes();
-        setHurricanes(data);
-        
-        if (data.length > 0) {
-          setSelectedHurricane(data[0]);
-          if (data[0].coordinates) {
-            const obs = await getHurricaneObservations(
-              data[0].coordinates[1],
-              data[0].coordinates[0]
-            );
-            setObservations(obs);
-            generateForecast(obs);
-            calculateRiskLevel(data[0], obs);
-            fetchSatelliteImagery(data[0].coordinates);
-            generateHistoricalData();
-          }
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-    const interval = setInterval(fetchData, 300000); // Update every 5 minutes
+    fetchGlobalData();
+    const interval = setInterval(fetchGlobalData, 300000); // Update every 5 minutes
     return () => clearInterval(interval);
-  }, []);
+  }, [dataSource]);
+
+  // Fetch data from all configured sources
+  async function fetchGlobalData() {
+    try {
+      setLoading(true);
+      
+      // Collect hurricanes from all sources based on filter
+      let allHurricanes = [];
+      
+      // US hurricanes from NOAA
+      if (dataSource === 'all' || dataSource === 'us') {
+        const usData = await getActiveHurricanes();
+        allHurricanes = [...allHurricanes, ...usData];
+      }
+      
+      // Japan/Western Pacific hurricanes
+      if (dataSource === 'all' || dataSource === 'japan') {
+        try {
+          const wpData = await getActiveHurricanesByRegion('JAPAN');
+          // Add a source flag to distinguish the data source
+          const taggedWpData = wpData.map(h => ({...h, dataSource: 'JAPAN'}));
+          allHurricanes = [...allHurricanes, ...taggedWpData];
+        } catch (wpError) {
+          console.error("Error fetching Western Pacific data:", wpError);
+        }
+      }
+      
+      // Australian region cyclones
+      if (dataSource === 'all' || dataSource === 'australia') {
+        try {
+          const auData = await getActiveHurricanesByRegion('AUSTRALIA');
+          // Add a source flag to distinguish the data source
+          const taggedAuData = auData.map(h => ({...h, dataSource: 'AUSTRALIA'}));
+          allHurricanes = [...allHurricanes, ...taggedAuData];
+        } catch (auError) {
+          console.error("Error fetching Australian region data:", auError);
+        }
+      }
+      
+      setHurricanes(allHurricanes);
+      
+      // Select first hurricane if available and none selected
+      if (allHurricanes.length > 0 && !selectedHurricane) {
+        await handleHurricaneSelect(allHurricanes[0]);
+      } else if (selectedHurricane) {
+        // If a hurricane is already selected, find it in the new data
+        const updatedSelection = allHurricanes.find(h => h.id === selectedHurricane.id);
+        if (updatedSelection) {
+          await handleHurricaneSelect(updatedSelection);
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Handle hurricane selection
   const handleHurricaneSelect = async (hurricane) => {
@@ -69,10 +105,28 @@ export default function HurricaneTracker() {
     setSelectedHurricane(hurricane);
     if (hurricane.coordinates) {
       try {
-        const obs = await getHurricaneObservations(
-          hurricane.coordinates[1],
-          hurricane.coordinates[0]
-        );
+        let obs;
+        // Choose data source based on hurricane source
+        if (hurricane.dataSource === 'JAPAN') {
+          obs = await getOpenMeteoObservations(
+            hurricane.coordinates[1],
+            hurricane.coordinates[0],
+            'JAPAN'
+          );
+        } else if (hurricane.dataSource === 'AUSTRALIA') {
+          obs = await getOpenMeteoObservations(
+            hurricane.coordinates[1],
+            hurricane.coordinates[0],
+            'AUSTRALIA'
+          );
+        } else {
+          // Default to NOAA for US hurricanes
+          obs = await getHurricaneObservations(
+            hurricane.coordinates[1],
+            hurricane.coordinates[0]
+          );
+        }
+        
         setObservations(obs);
         generateForecast(obs);
         calculateRiskLevel(hurricane, obs);
@@ -277,6 +331,44 @@ export default function HurricaneTracker() {
             Active Hurricanes: {hurricanes.length}
           </span>
         </div>
+        
+        {/* Global Region Filter */}
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setDataSource('all')}
+            className={`text-xs px-2 py-1 rounded-lg flex items-center gap-1 ${
+              dataSource === 'all' ? 'bg-[#2a3890]' : 'bg-[#1a237e]/50 hover:bg-[#1a237e]'
+            }`}
+          >
+            <Globe className="h-3 w-3" />
+            <span>Global</span>
+          </button>
+          <button 
+            onClick={() => setDataSource('us')}
+            className={`text-xs px-2 py-1 rounded-lg ${
+              dataSource === 'us' ? 'bg-[#2a3890]' : 'bg-[#1a237e]/50 hover:bg-[#1a237e]'
+            }`}
+          >
+            US
+          </button>
+          <button 
+            onClick={() => setDataSource('japan')}
+            className={`text-xs px-2 py-1 rounded-lg ${
+              dataSource === 'japan' ? 'bg-[#2a3890]' : 'bg-[#1a237e]/50 hover:bg-[#1a237e]'
+            }`}
+          >
+            W Pacific
+          </button>
+          <button 
+            onClick={() => setDataSource('australia')}
+            className={`text-xs px-2 py-1 rounded-lg ${
+              dataSource === 'australia' ? 'bg-[#2a3890]' : 'bg-[#1a237e]/50 hover:bg-[#1a237e]'
+            }`}
+          >
+            Australia
+          </button>
+        </div>
+        
         <div className="text-gray-300 text-sm">
           Last Updated: {new Date().toLocaleTimeString()}
         </div>
@@ -310,6 +402,13 @@ export default function HurricaneTracker() {
                 Cat {hurricane.category}
               </span>
             )}
+            {/* Show data source indicator */}
+            {hurricane.dataSource && (
+              <span className="text-xs text-gray-400 ml-1">
+                {hurricane.dataSource === 'JAPAN' ? '(WP)' : 
+                 hurricane.dataSource === 'AUSTRALIA' ? '(AU)' : ''}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -330,7 +429,16 @@ export default function HurricaneTracker() {
           {selectedHurricane ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold">{selectedHurricane.name}</h2>
+                <h2 className="text-xl font-bold">
+                  {selectedHurricane.name}
+                  {selectedHurricane.dataSource && (
+                    <span className="text-sm font-normal text-gray-400 ml-2">
+                      {selectedHurricane.dataSource === 'JAPAN' ? 'Western Pacific' : 
+                       selectedHurricane.dataSource === 'AUSTRALIA' ? 'Australian Region' : 
+                       'Atlantic/Eastern Pacific'}
+                    </span>
+                  )}
+                </h2>
                 <div className="flex gap-2">
                   <button className="p-1 rounded hover:bg-[#1a237e]">
                     <Share className="h-4 w-4" />
@@ -555,7 +663,7 @@ export default function HurricaneTracker() {
                         <div className={`text-lg font-bold text-yellow-500`}>
                           Moderate
                         </div>
-                      </div>
+                        </div>
                       <div className="bg-[#1a237e]/30 p-3 rounded-lg">
                         <div className="text-xs text-gray-300">Rapid Intensification</div>
                         <div className={`text-lg font-bold ${observations?.windSpeed > 100 ? 'text-red-500' : 'text-green-500'}`}>
@@ -597,7 +705,9 @@ export default function HurricaneTracker() {
                             {selectedHurricane.basin === 'NA' ? '(North Atlantic)' : 
                              selectedHurricane.basin === 'EP' ? '(Eastern Pacific)' : 
                              selectedHurricane.basin === 'WP' ? '(Western Pacific)' : 
-                             selectedHurricane.basin === 'NI' ? '(North Indian)' : ''}
+                             selectedHurricane.basin === 'NI' ? '(North Indian)' : 
+                             selectedHurricane.basin === 'SI' ? '(South Indian)' : 
+                             selectedHurricane.basin === 'SP' ? '(South Pacific)' : ''}
                           </span>
                         </div>
                         <div>
@@ -609,7 +719,7 @@ export default function HurricaneTracker() {
                         </div>
                         <div>
                           <span className="text-gray-400">Formed:</span> {
-                            new Date().toLocaleDateString()
+                            new Date(selectedHurricane.onset || new Date()).toLocaleDateString()
                           }
                         </div>
                       </div>
@@ -624,6 +734,18 @@ export default function HurricaneTracker() {
                           {selectedHurricane.instruction || 'No active advisories at this time.'}
                         </div>
                       </div>
+                      
+                      {/* Add data source info if available */}
+                      {selectedHurricane.dataSource && (
+                        <div className="mt-4">
+                          <span className="text-gray-400">Data Source:</span> 
+                          <span className="text-xs bg-[#1a237e]/50 px-2 py-1 rounded ml-2">
+                            {selectedHurricane.dataSource === 'JAPAN' ? 'JMA (Japan)' : 
+                             selectedHurricane.dataSource === 'AUSTRALIA' ? 'BOM (Australia)' : 
+                             'NOAA (US)'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -746,7 +868,9 @@ export default function HurricaneTracker() {
                       
                       <div className="text-xs text-gray-300 flex items-center">
                         <Info className="h-4 w-4 mr-1 flex-shrink-0" />
-                        <span>Impact analysis based on NOAA models and historical damage patterns</span>
+                        <span>Impact analysis based on {selectedHurricane.dataSource ? 
+                          (selectedHurricane.dataSource === 'JAPAN' ? 'JMA' : 
+                           selectedHurricane.dataSource === 'AUSTRALIA' ? 'BOM' : 'NOAA') : 'NOAA'} models and historical damage patterns</span>
                       </div>
                     </div>
                   )}
@@ -757,22 +881,64 @@ export default function HurricaneTracker() {
               <div className="mt-6">
                 <h3 className="text-sm font-bold mb-2">External Resources</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <a 
-                    href="#" 
-                    className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span>NOAA Tracker</span>
-                    <ArrowUpRight className="h-3 w-3 ml-auto" />
-                  </a>
-                  <a 
-                    href="#" 
-                    className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
-                  >
-                    <Wind className="h-4 w-4" />
-                    <span>Wind Maps</span>
-                    <ArrowUpRight className="h-3 w-3 ml-auto" />
-                  </a>
+                  {selectedHurricane.dataSource === 'JAPAN' ? (
+                    <>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>JMA Tracker</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Wind className="h-4 w-4" />
+                        <span>Digital Typhoon</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                    </>
+                  ) : selectedHurricane.dataSource === 'AUSTRALIA' ? (
+                    <>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>BOM Cyclone Center</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Wind className="h-4 w-4" />
+                        <span>Australian Weather Maps</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>NOAA Tracker</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                      <a 
+                        href="#" 
+                        className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"
+                      >
+                        <Wind className="h-4 w-4" />
+                        <span>Wind Maps</span>
+                        <ArrowUpRight className="h-3 w-3 ml-auto" />
+                      </a>
+                    </>
+                  )}
                   <a 
                     href="#" 
                     className="flex items-center gap-1 text-xs bg-[#1a237e]/50 p-2 rounded-lg hover:bg-[#1a237e]"

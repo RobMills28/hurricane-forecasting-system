@@ -222,26 +222,53 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     });
   };
   
-  // Get hurricane color based on category
+  // Get hurricane color based on category and storm type
   const getHurricaneColor = (hurricane) => {
+    // Check for storm type first
+    if (hurricane.type === 'Winter Storm') {
+      return '#87CEFA'; // Light blue for winter storms
+    }
+    
+    if (hurricane.type === 'Severe Thunderstorm') {
+      return '#9932CC'; // Purple for severe thunderstorms
+    }
+    
+    if (hurricane.type === 'Severe Storm') {
+      return '#6495ED'; // Cornflower blue for severe storms
+    }
+    
+    // For tropical systems, color by category
     const category = hurricane.category || 0;
     
     const colors = {
-      0: '#5DA5DA', // Tropical Storm / Depression (blue)
-      1: '#4DC4FF', // Category 1 (lighter blue)
-      2: '#4DFFEA', // Category 2 (cyan)
-      3: '#FFDE33', // Category 3 (yellow)
-      4: '#FF9933', // Category 4 (orange)
-      5: '#FF5050'  // Category 5 (red)
+      'TD': '#5DA5DA', // Tropical Depression (blue)
+      'TS': '#5DA5DA', // Tropical Storm (blue)
+      0: '#5DA5DA',   // For numerical fallback
+      1: '#4DC4FF',   // Category 1 (lighter blue)
+      2: '#4DFFEA',   // Category 2 (cyan)
+      3: '#FFDE33',   // Category 3 (yellow)
+      4: '#FF9933',   // Category 4 (orange)
+      5: '#FF5050'    // Category 5 (red)
     };
     
-    return colors[category] || colors[0];
+    return colors[category] || colors['TS'];
   };
   
   // Get marker size based on category and selection
   const getMarkerSize = (hurricane) => {
     // Base size is slightly larger for higher categories
-    const baseSize = 5 + (hurricane.category || 0);
+    let baseSize;
+    
+    // Different size based on storm type
+    if (hurricane.type === 'Winter Storm' || hurricane.type === 'Severe Storm') {
+      baseSize = 5; // Standard size for non-tropical systems
+    } else {
+      // For tropical systems, scale by category
+      const categoryValue = hurricane.category === 'TS' ? 0 : 
+                           hurricane.category === 'TD' ? 0 : 
+                           parseInt(hurricane.category) || 0;
+      baseSize = 5 + (categoryValue * 0.8);
+    }
     
     // Make selected hurricane slightly larger
     if (selectedHurricane?.id === hurricane.id) {
@@ -264,7 +291,10 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     }
     
     // Default opacity varies slightly based on category for visual hierarchy
-    return 0.7 + ((hurricane.category || 0) * 0.05);
+    const categoryValue = hurricane.category === 'TS' ? 0 : 
+                         hurricane.category === 'TD' ? 0 : 
+                         parseInt(hurricane.category) || 0;
+    return 0.7 + (categoryValue * 0.05);
   };
   
   // Get stroke width based on selection
@@ -491,6 +521,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
                 >
                   <div className="px-2 py-1">
                     <p className="font-bold">{hurricane.name}</p>
+                    <p className="text-sm">Type: {hurricane.type}</p>
                     <p className="text-sm">Category: {hurricane.category || 'TS'}</p>
                   </div>
                 </Tooltip>
