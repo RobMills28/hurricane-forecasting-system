@@ -43,3 +43,46 @@ body {
 .custom-popup .leaflet-popup-close-button {
   color: white;
 }
+
+.satellite-error-tile {
+  background-color: #0B4066 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* For areas still showing "Map data not available" text */
+.leaflet-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background-color: #0B4066;
+}
+
+/* Add this to your globals.css file */
+.leaflet-tile-loaded {
+  background-color: #0B4066 !important;
+}
+
+/* Override any text in the map tiles */
+.leaflet-tile::before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #0B4066;
+  z-index: 10;
+}
+
+/* Hide any 'Map data not available' text */
+.leaflet-container .leaflet-tile {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+

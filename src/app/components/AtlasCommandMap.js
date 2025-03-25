@@ -30,11 +30,6 @@ const CircleMarker = dynamic(
   { ssr: false }
 );
 
-const Circle = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Circle),
-  { ssr: false }
-);
-
 const Popup = dynamic(
   () => import('react-leaflet').then((mod) => mod.Popup),
   { ssr: false }
@@ -78,6 +73,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   const [showFilters, setShowFilters] = useState(false);
   const [filterCategory, setFilterCategory] = useState(null);
   const [filterRegion, setFilterRegion] = useState(null);
+  const [filterStormType, setFilterStormType] = useState(null); // New filter for storm type
   const [currentTimelineValue, setCurrentTimelineValue] = useState(0);
   const [showTimeline, setShowTimeline] = useState(false);
   
@@ -215,6 +211,11 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       
       // Filter by region/basin
       if (filterRegion && hurricane.basin !== filterRegion) {
+        return false;
+      }
+      
+      // Filter by storm type
+      if (filterStormType && hurricane.type !== filterStormType) {
         return false;
       }
       
@@ -447,13 +448,22 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   // Get filtered hurricanes
   const filteredHurricanes = getFilteredHurricanes();
 
+  // Get unique storm types for filter
+  const stormTypes = Array.from(
+    new Set(
+      hurricanes
+        ?.filter(h => h.type)
+        .map(h => h.type) || []
+    )
+  ).sort();
+
   return (
     <div className="w-full h-full relative bg-[#0d1424]">
       <MapContainer
         center={selectedHurricane?.coordinates ? 
           [selectedHurricane.coordinates[1], selectedHurricane.coordinates[0]] : 
-          [25, -80]}
-        zoom={5}
+          [25, -40]} // Shifted initial view to show more of the Atlantic and global view
+        zoom={3} // Decreased initial zoom to show more of the world
         className="w-full h-full"
         style={{ background: '#0d1424' }}
         minZoom={2}
@@ -481,7 +491,23 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           noWrap={true}
           opacity={satelliteMapOpacity}
           className="transition-opacity duration-700"
+          // Add error handling for satellite imagery
+          eventHandlers={{
+            tileerror: (event) => {
+              // When a tile fails to load, add a custom CSS class to style it
+              if (event.tile) {
+                event.tile.classList.add('satellite-error-tile');
+                // Set background color similar to satellite imagery (ocean blue)
+                event.tile.style.backgroundColor = '#0B4066';
+              }
+            }
+          }}
         />
+
+        // Add a background layer for satellite view that will show when tiles fail to load
+        {activeBaseMap === 'satellite' && (
+          <div className="absolute inset-0 bg-[#0B4066] z-[-1]" />
+        )}
         
         {/* NASA Layer with opacity transitions */}
         {(activeNasaLayer || previousNasaLayer) && (
@@ -495,85 +521,87 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         )}
         
         {/* Hurricanes */}
-        {filteredHurricanes.map(hurricane => (
-          hurricane.coordinates && (
-            <React.Fragment key={hurricane.id}>
-              {/* Main hurricane marker */}
-              <CircleMarker
-                center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
-                radius={getMarkerSize(hurricane)}
-                pathOptions={{
-                  color: '#ffffff',
-                  weight: getStrokeWidth(hurricane),
-                  fillColor: getHurricaneColor(hurricane),
-                  fillOpacity: getMarkerOpacity(hurricane)
-                }}
-                eventHandlers={{
-                  click: () => onSelectHurricane(hurricane)
-                }}
-              >
-                {/* Tooltip on hover */}
-                <Tooltip 
-                  direction="top" 
-                  offset={[0, -5]} 
-                  opacity={0.9} 
-                  className="custom-tooltip"
-                >
-                  <div className="px-2 py-1">
-                    <p className="font-bold">{hurricane.name}</p>
-                    <p className="text-sm">Type: {hurricane.type}</p>
-                    <p className="text-sm">Category: {hurricane.category || 'TS'}</p>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
+    {filteredHurricanes.map(hurricane => (
+      hurricane.coordinates && (
+        <React.Fragment key={`marker-${hurricane.id}`}>
+          {/* Main hurricane marker - Always using CircleMarker for consistent display */}
+          <CircleMarker
+            center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
+            radius={getMarkerSize(hurricane)}
+            pathOptions={{
+              color: '#ffffff',
+              weight: getStrokeWidth(hurricane),
+              fillColor: getHurricaneColor(hurricane),
+              fillOpacity: getMarkerOpacity(hurricane)
+            }}
+            eventHandlers={{
+              click: () => onSelectHurricane(hurricane)
+            }}
+            // Add cursor style to indicate clickable
+            className="cursor-pointer"
+          >
+            {/* Tooltip on hover */}
+            <Tooltip 
+              direction="top" 
+              offset={[0, -5]} 
+              opacity={0.9} 
+              className="custom-tooltip"
+            >
+              <div className="px-2 py-1">
+                <p className="font-bold">{hurricane.name}</p>
+                <p className="text-sm">Type: {hurricane.type}</p>
+                <p className="text-sm">Category: {hurricane.category || 'TS'}</p>
+              </div>
+            </Tooltip>
+          </CircleMarker>
+          
+          {/* Forecast path polyline for selected or when "Show Forecast Paths" is enabled */}
+          {(showForecastPaths || selectedHurricane?.id === hurricane.id) && (
+            <Polyline
+              positions={getPredictedPath(hurricane)}
+              pathOptions={{
+                color: getHurricaneColor(hurricane),
+                weight: 2,
+                opacity: selectedHurricane?.id === hurricane.id ? 0.9 : 0.6,
+                dashArray: '5, 5'
+              }}
+            />
+          )}
+          
+          {/* Forecast points along the path */}
+          {selectedHurricane?.id === hurricane.id && 
+            getPredictedPath(hurricane).map((point, index) => {
+              if (index === 0) return null; // Skip the current position
               
-              {/* Forecast path polyline for selected or when "Show Forecast Paths" is enabled */}
-              {(showForecastPaths || selectedHurricane?.id === hurricane.id) && (
-                <Polyline
-                  positions={getPredictedPath(hurricane)}
+              return (
+                <CircleMarker
+                  key={`forecast-${hurricane.id}-${index}`}
+                  center={point}
+                  radius={3} // Small dot for forecast points
                   pathOptions={{
-                    color: getHurricaneColor(hurricane),
-                    weight: 2,
-                    opacity: selectedHurricane?.id === hurricane.id ? 0.9 : 0.6,
-                    dashArray: '5, 5'
+                    color: '#ffffff',
+                    fillColor: getHurricaneColor(hurricane),
+                    fillOpacity: 0.8 - (index * 0.1), // Decreasing opacity for further predictions
+                    weight: 1
                   }}
-                />
-              )}
-              
-              {/* Forecast points along the path */}
-              {selectedHurricane?.id === hurricane.id && 
-                getPredictedPath(hurricane).map((point, index) => {
-                  if (index === 0) return null; // Skip the current position
-                  
-                  return (
-                    <CircleMarker
-                      key={`forecast-${hurricane.id}-${index}`}
-                      center={point}
-                      radius={3} // Small dot for forecast points
-                      pathOptions={{
-                        color: '#ffffff',
-                        fillColor: getHurricaneColor(hurricane),
-                        fillOpacity: 0.8 - (index * 0.1), // Decreasing opacity for further predictions
-                        weight: 1
-                      }}
-                    >
-                      <Tooltip 
-                        direction="top" 
-                        offset={[0, -3]} 
-                        opacity={0.9}
-                        permanent={false}
-                      >
-                        <div className="px-2 py-1">
-                          <p className="text-sm font-bold">+{index * 24}h Forecast</p>
-                        </div>
-                      </Tooltip>
-                    </CircleMarker>
-                  );
-                })
-              }
-            </React.Fragment>
-          )
-        ))}
+                >
+                  <Tooltip 
+                    direction="top" 
+                    offset={[0, -3]} 
+                    opacity={0.9}
+                    permanent={false}
+                  >
+                    <div className="px-2 py-1">
+                      <p className="text-sm font-bold">+{index * 24}h Forecast</p>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              );
+            })
+          }
+        </React.Fragment>
+      )
+    ))}
       </MapContainer>
       
       {/* Control Panel */}
@@ -696,7 +724,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       {/* Search Panel */}
       {showSearch && (
         <div className="absolute top-24 right-2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[250px]">
-          <h4 className="text-sm font-bold mb-2 text-white">Search Hurricanes</h4>
+          <h4 className="text-sm font-bold mb-2 text-white">Search Storms</h4>
           <input
             type="text"
             value={searchQuery}
@@ -738,13 +766,13 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       {/* Filters Panel */}
       {showFilters && (
         <div className="absolute top-24 right-2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[250px]">
-          <h4 className="text-sm font-bold mb-2 text-white">Filter Hurricanes</h4>
+          <h4 className="text-sm font-bold mb-2 text-white">Filter Storms</h4>
           
           {/* Category Filter */}
           <div className="mb-3">
             <p className="text-xs text-gray-300 mb-1">Category</p>
             <div className="grid grid-cols-3 gap-1">
-              {[0, 1, 2, 3, 4, 5].map(category => (
+              {[0, 1, 2, 3, 4, 5, 'TS', 'TD'].map(category => (
                 <button
                   key={category}
                   onClick={() => setFilterCategory(filterCategory === category ? null : category)}
@@ -754,7 +782,27 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
                       : 'bg-[#162040] text-gray-300'
                   }`}
                 >
-                  {category === 0 ? 'TS' : category}
+                  {category}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Storm Type Filter */}
+          <div className="mb-3">
+            <p className="text-xs text-gray-300 mb-1">Storm Type</p>
+            <div className="grid grid-cols-1 gap-1 max-h-[100px] overflow-y-auto">
+              {stormTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => setFilterStormType(filterStormType === type ? null : type)}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    filterStormType === type 
+                      ? 'bg-[#1a237e] text-white' 
+                      : 'bg-[#162040] text-gray-300'
+                  }`}
+                >
+                  {type}
                 </button>
               ))}
             </div>
@@ -785,6 +833,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
             onClick={() => {
               setFilterCategory(null);
               setFilterRegion(null);
+              setFilterStormType(null);
             }}
             className="w-full text-center p-2 rounded text-xs bg-[#3e1a1a] text-gray-300 hover:bg-[#641f1f] transition-colors"
           >
@@ -796,7 +845,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       {/* Timeline Slider */}
       {showTimeline && (
         <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-[#0b1021]/90 p-3 rounded-lg z-[1000] w-[80%] max-w-[600px]">
-          <h4 className="text-sm font-bold mb-2 text-white text-center">Hurricane Timeline</h4>
+          <h4 className="text-sm font-bold mb-2 text-white text-center">Storm Timeline</h4>
           
           <input
             type="range"
@@ -817,7 +866,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       
       {/* Legend */}
       <div className="absolute bottom-2 right-2 bg-[#0b1021]/70 text-white p-3 rounded-lg z-[1000]">
-        <h4 className="text-xs font-bold mb-2">Hurricane Categories</h4>
+        <h4 className="text-xs font-bold mb-2">Storm Categories</h4>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#5DA5DA' }}></div>
@@ -843,6 +892,14 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#FF5050' }}></div>
             <span>Category 5</span>
           </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#9932CC' }}></div>
+            <span>Thunderstorm</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#87CEFA' }}></div>
+            <span>Winter Storm</span>
+          </div>
         </div>
       </div>
       
@@ -858,7 +915,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       )}
       
       {/* Filter/Search Indicator */}
-      {(searchQuery || filterCategory !== null || filterRegion) && (
+      {(searchQuery || filterCategory !== null || filterRegion || filterStormType) && (
         <div className="absolute top-2 left-2 bg-[#1a237e] p-2 rounded-lg z-[1000]">
           <div className="flex items-center gap-2 text-xs">
             <Filter className="h-4 w-4 text-yellow-400" />
@@ -868,6 +925,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
                 setSearchQuery('');
                 setFilterCategory(null);
                 setFilterRegion(null);
+                setFilterStormType(null);
               }}
               className="text-red-400 hover:text-red-300"
             >
