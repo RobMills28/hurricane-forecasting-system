@@ -486,28 +486,12 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         />
         
         <TileLayer
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
           attribution='Imagery &copy; Esri'
           noWrap={true}
           opacity={satelliteMapOpacity}
           className="transition-opacity duration-700"
-          // Add error handling for satellite imagery
-          eventHandlers={{
-            tileerror: (event) => {
-              // When a tile fails to load, add a custom CSS class to style it
-              if (event.tile) {
-                event.tile.classList.add('satellite-error-tile');
-                // Set background color similar to satellite imagery (ocean blue)
-                event.tile.style.backgroundColor = '#0B4066';
-              }
-            }
-          }}
         />
-
-        // Add a background layer for satellite view that will show when tiles fail to load
-        {activeBaseMap === 'satellite' && (
-          <div className="absolute inset-0 bg-[#0B4066] z-[-1]" />
-        )}
         
         {/* NASA Layer with opacity transitions */}
         {(activeNasaLayer || previousNasaLayer) && (
