@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, Legend } from 'recharts';
 import { AlertTriangle, Wind, Cloud, ArrowUp, ArrowDown, Info, Clock, Droplets, Navigation } from 'lucide-react';
+import { makePrediction as makeAPIPrediction } from '../components/services/hurricaneAPI';
 
 const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
   const [loading, setLoading] = useState(false);
@@ -14,26 +15,99 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
   const [hoverInfo, setHoverInfo] = useState(null);
   const [predictionSummary, setPredictionSummary] = useState(null);
   
-  // Generate forecast when selected hurricane changes
-  useEffect(() => {
-    if (!selectedHurricane) return;
-    
-    setLoading(true);
-    
-    // Simulate API call delay
-    const timer = setTimeout(() => {
-      generatePrediction();
-      setLoading(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [selectedHurricane]);
+// Generate forecast when selected hurricane changes
+useEffect(() => {
+  if (!selectedHurricane) return;
   
-  // Generate prediction data
-  const generatePrediction = () => {
-    if (!selectedHurricane) return;
+  setLoading(true);
+  
+  // Call the async function
+  const fetchPrediction = async () => {
+    try {
+      await generatePrediction();
+    } catch (error) {
+      console.error('Error in prediction:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchPrediction();
+}, [selectedHurricane]);
+  
+// Generate prediction data
+const generatePrediction = async () => {
+  if (!selectedHurricane) return;
+  
+  try {
+    // Create the current state object for the API call
+    const currentState = {
+      position: selectedHurricane.coordinates ? {
+        lat: selectedHurricane.coordinates[1],
+        lon: selectedHurricane.coordinates[0]
+      } : null,
+      wind_speed: selectedHurricane.windSpeed,
+      pressure: selectedHurricane.pressure,
+      basin: selectedHurricane.basin,
+      sea_surface_temp: {
+        value: 28.5 // This would typically come from actual data
+      }
+    };
+    
+    // Get predictions from the Python backend using the agent
+    const agentId = 'default-hurricane-agent'; // Use appropriate agent ID
+    const result = await makeAPIPrediction(agentId, currentState);
+    
+    // Convert the response to match the expected format for our UI
+    const forecast = [];
     
     // Generate forecast points for the next 120 hours (5 days)
+    // We still need to create time points since the API might not provide hourly points
+    for (let hour = 0; hour <= 120; hour += 6) {
+      const day = Math.floor(hour / 24) + 1;
+      
+      // For uncertainty calculation
+      const dayFraction = hour / 24;
+      const uncertaintyFactor = Math.min(0.5, 0.1 + (dayFraction * 0.1));
+      
+      // Calculate wind at this hour based on basic interpolation
+      // In a real implementation, you'd use the actual prediction points
+      const baseWindSpeed = result.wind_speed || selectedHurricane.windSpeed || 85;
+      const basePressure = result.pressure || selectedHurricane.pressure || 980;
+      
+      const windLow = baseWindSpeed * (1 - uncertaintyFactor);
+      const windHigh = baseWindSpeed * (1 + uncertaintyFactor);
+      
+      // Add forecast point
+      forecast.push({
+        hour,
+        day: day,
+        windSpeed: baseWindSpeed,
+        pressure: basePressure,
+        category: result.category || getHurricaneCategory(baseWindSpeed),
+        windLow,
+        windHigh,
+        uncertaintyRange: [windLow, windHigh],
+        confidence: Math.max(20, Math.round(100 - (hour * 0.6))),
+        // Add any additional data from the API
+        position: result.position
+      });
+    }
+    
+    setPredictionData(forecast);
+    
+    // Generate ensemble data
+    generateEnsembleData(forecast);
+    
+    // Generate confidence data
+    generateConfidenceData(forecast);
+    
+    // Generate prediction summary
+    generatePredictionSummary(forecast);
+  } catch (error) {
+    console.error('Error getting prediction from API:', error);
+    
+    // Fallback to original method if API fails
     const forecast = [];
     let baseWindSpeed = selectedHurricane.windSpeed || 85;
     let basePressure = selectedHurricane.pressure || 980;
@@ -46,26 +120,20 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
       // Different behavior based on hurricane lifecycle phase
       let intensityTrend;
       if (dayFraction < 1) {
-        // First day - usually intensification
         intensityTrend = 5 + (Math.random() * 5);
       } else if (dayFraction < 3) {
-        // Peak period - fluctuations around peak
         intensityTrend = Math.random() * 20 - 10;
       } else {
-        // Weakening phase
         intensityTrend = -5 - (Math.random() * 10);
       }
       
-      // Apply trend with some randomness
       baseWindSpeed += (intensityTrend * 0.2) + (Math.random() * 6 - 3);
       basePressure += (intensityTrend * -0.1) + (Math.random() * 3 - 1.5);
       
-      // Calculate uncertainty based on forecast time
       const uncertaintyFactor = Math.min(0.5, 0.1 + (dayFraction * 0.1));
       const windLow = baseWindSpeed * (1 - uncertaintyFactor);
       const windHigh = baseWindSpeed * (1 + uncertaintyFactor);
       
-      // Add forecast point
       forecast.push({
         hour,
         day: Math.floor(hour / 24) + 1,
@@ -80,16 +148,11 @@ const HurricanePrediction = ({ selectedHurricane, nasaService }) => {
     }
     
     setPredictionData(forecast);
-    
-    // Generate ensemble data
     generateEnsembleData(forecast);
-    
-    // Generate confidence data
     generateConfidenceData(forecast);
-    
-    // Generate prediction summary
     generatePredictionSummary(forecast);
-  };
+  }
+};
   
   // Generate ensemble model data
   const generateEnsembleData = (forecast) => {

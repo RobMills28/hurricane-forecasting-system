@@ -1,0 +1,26 @@
+# Core scientific libraries
+numpy>=1.21.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# Machine learning
+torch>=1.9.0
+
+# Meteorological data handling
+xarray>=0.20.0
+netCDF4>=1.5.7
+
+# Geospatial libraries
+cartopy>=0.20.0
+
+# API and web
+fastapi>=0.68.0
+uvicorn>=0.15.0
+requests>=2.26.0
+
+# Visualization (for development and testing)
+matplotlib>=3.4.3
+seaborn>=0.11.2
+
+# Utilities
+tqdm>=4.62.3
