@@ -505,25 +505,37 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         )}
         
         {/* Hurricanes */}
-    {filteredHurricanes.map(hurricane => (
-      hurricane.coordinates && (
-        <React.Fragment key={`marker-${hurricane.id}`}>
-          {/* Main hurricane marker - Always using CircleMarker for consistent display */}
+  {filteredHurricanes.map(hurricane => (
+    hurricane.coordinates && (
+      <React.Fragment key={`marker-${hurricane.id}`}>
+        {/* Main hurricane marker - Always using CircleMarker for consistent display */}
+        <CircleMarker
+          center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
+          radius={getMarkerSize(hurricane) + 2} // Slightly larger dots
+          pathOptions={{
+            color: '#ffffff',
+            weight: getStrokeWidth(hurricane),
+            fillColor: getHurricaneColor(hurricane),
+            fillOpacity: getMarkerOpacity(hurricane)
+          }}
+          eventHandlers={{
+            click: () => onSelectHurricane(hurricane)
+          }}
+          className="cursor-pointer"
+        >
+          {/* Add an invisible larger hit area */}
           <CircleMarker
             center={[hurricane.coordinates[1], hurricane.coordinates[0]]}
-            radius={getMarkerSize(hurricane)}
+            radius={15} // Large invisible hit area (15px radius)
             pathOptions={{
-              color: '#ffffff',
-              weight: getStrokeWidth(hurricane),
-              fillColor: getHurricaneColor(hurricane),
-              fillOpacity: getMarkerOpacity(hurricane)
+              color: 'transparent',
+              fillColor: 'transparent',
+              fillOpacity: 0
             }}
             eventHandlers={{
               click: () => onSelectHurricane(hurricane)
             }}
-            // Add cursor style to indicate clickable
-            className="cursor-pointer"
-          >
+          />
             {/* Tooltip on hover */}
             <Tooltip 
               direction="top" 
