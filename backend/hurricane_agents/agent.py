@@ -148,13 +148,19 @@ class HurricanePredictionAgent:
         Args:
             state: Current hurricane state
             history: List of historical states
-            
+                
         Returns:
             Prediction dictionary with position, wind speed, and pressure
         """
         # Get basin-specific model if available
         basin = state.get("basin", "DEFAULT")
         weights = self.basin_models.get(basin) if self.options["use_basin_models"] else self.weights
+        
+        # If weights is None, fall back to default weights
+        if weights is None:
+            weights = self.basin_models.get("DEFAULT")
+            if weights is None:  # If DEFAULT is also missing, use self.weights
+                weights = self.weights
         
         # Make individual ensemble predictions
         ensemble_predictions = [
