@@ -290,18 +290,33 @@ export default function HurricaneTracker() {
     return parseInt(category) || -1;
   }
 
-  // Handle hurricane selection
-  const handleHurricaneSelect = async (hurricane) => {
-    if (!hurricane) {
-      setSelectedHurricane(null);
-      return;
-    }
-    
-    setSelectedHurricane(hurricane);
-    if (hurricane.coordinates) {
+// Handle hurricane selection with Python backend integration
+const handleHurricaneSelect = async (hurricane) => {
+  if (!hurricane) {
+    setSelectedHurricane(null);
+    return;
+  }
+  
+  setSelectedHurricane(hurricane);
+  if (hurricane.coordinates) {
+    try {
+      // Call Python backend API to get all necessary storm data
+      const stormData = await fetchStormDataFromPython(hurricane);
+      
+      // Update UI state with data from Python backend
+      setObservations(stormData.observations);
+      setForecastData(stormData.forecast);
+      setRiskLevel(stormData.riskLevel);
+      setSatelliteImagery(stormData.satelliteImagery);
+      setHistoricalData(stormData.historicalData);
+      
+    } catch (err) {
+      console.error("Error fetching storm data from Python backend:", err);
+      
+      // Fall back to JavaScript implementation
       try {
         let obs;
-        // Choose data source based on hurricane source
+        // Existing JavaScript-based data fetching as fallback
         if (hurricane.dataSource === 'WP' || hurricane.dataSource === 'JAPAN') {
           obs = await getOpenMeteoObservations(
             hurricane.coordinates[1],
@@ -315,7 +330,6 @@ export default function HurricaneTracker() {
             'SP'
           );
         } else {
-          // Default to NOAA for US hurricanes
           obs = await getHurricaneObservations(
             hurricane.coordinates[1],
             hurricane.coordinates[0]
@@ -327,11 +341,42 @@ export default function HurricaneTracker() {
         calculateRiskLevel(hurricane, obs);
         fetchSatelliteImagery(hurricane.coordinates);
         generateHistoricalData();
-      } catch (err) {
-        console.error("Error fetching observations:", err);
+      } catch (fallbackErr) {
+        console.error("Fallback also failed:", fallbackErr);
       }
     }
+  }
+};
+
+// New function to fetch storm data from Python backend
+const fetchStormDataFromPython = async (hurricane) => {
+  // Build request for the Python API
+  const requestData = {
+    coordinates: hurricane.coordinates,
+    basin: hurricane.basin,
+    hurricane_id: hurricane.id,
+    name: hurricane.name,
+    category: hurricane.category,
+    data_source: hurricane.dataSource
   };
+
+  console.log("Sending request to Python with data:", requestData);
+  
+  // Call Python API endpoint (you'll need to create this endpoint)
+  const response = await fetch('http://localhost:8000/storm_data', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestData)
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch storm data: ${response.status}`);
+  }
+  
+  return await response.json();
+};
 
   // Fetch satellite imagery for the selected hurricane
   const fetchSatelliteImagery = async (coordinates) => {
@@ -339,7 +384,7 @@ export default function HurricaneTracker() {
     
     try {
       // Simulate NASA imagery API call
-      // In a real implementation, you would use the getNasaImagery function
+      // Need to use the getNasaImagery function
       setSatelliteImagery({
         url: null, // Placeholder
         date: new Date().toISOString().split('T')[0],
@@ -651,22 +696,30 @@ export default function HurricaneTracker() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="flex flex-col items-center">
                       <Wind className="h-5 w-5 text-blue-400 mb-1" />
-                      <div className="text-lg font-bold">{observations.windSpeed || 'N/A'}</div>
+                      <div className="text-lg font-bold">
+                        {typeof observations.windSpeed === 'number' ? observations.windSpeed.toFixed(1) : 'N/A'}
+                      </div>
                       <div className="text-xs text-gray-300">Wind (mph)</div>
                     </div>
                     <div className="flex flex-col items-center">
                       <ThermometerSun className="h-5 w-5 text-orange-400 mb-1" />
-                      <div className="text-lg font-bold">{observations.temperature || 'N/A'}</div>
+                      <div className="text-lg font-bold">
+                        {typeof observations.temperature === 'number' ? observations.temperature.toFixed(1) : 'N/A'}
+                      </div>
                       <div className="text-xs text-gray-300">Temp (°C)</div>
                     </div>
                     <div className="flex flex-col items-center">
                       <Droplets className="h-5 w-5 text-blue-300 mb-1" />
-                      <div className="text-lg font-bold">{observations.relativeHumidity || 'N/A'}</div>
+                      <div className="text-lg font-bold">
+                        {typeof observations.relativeHumidity === 'number' ? observations.relativeHumidity.toFixed(0) : 'N/A'}
+                      </div>
                       <div className="text-xs text-gray-300">Humidity (%)</div>
                     </div>
                     <div className="flex flex-col items-center">
                       <BarChart4 className="h-5 w-5 text-gray-300 mb-1" />
-                      <div className="text-lg font-bold">{observations.barometricPressure || 'N/A'}</div>
+                      <div className="text-lg font-bold">
+                        {typeof observations.barometricPressure === 'number' ? observations.barometricPressure.toFixed(0) : 'N/A'}
+                      </div>
                       <div className="text-xs text-gray-300">Pressure (hPa)</div>
                     </div>
                   </div>

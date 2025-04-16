@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import logging
+import random
 from typing import Dict, List, Any, Optional
 
 from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
@@ -61,6 +62,23 @@ class TrainingStatus(BaseModel):
     status: str
     progress: float = 0
     metrics: Optional[Dict[str, Any]] = None
+
+from typing import Dict, List, Any, Optional, Union
+from pydantic import BaseModel, Field
+
+# Update the StormDataRequest model to be more flexible
+class StormDataRequest(BaseModel):
+    coordinates: Optional[Union[List[float], List[Any], Dict[str, float]]] = None
+    basin: Optional[str] = None
+    hurricane_id: Optional[str] = None
+    name: Optional[str] = None
+    category: Optional[Any] = None  # Accept any type for category
+    data_source: Optional[str] = None
+    
+    class Config:
+        # Make validation more flexible
+        extra = "allow"  # Allow extra fields in the request
+        arbitrary_types_allowed = True
 
 # Background task to train an agent
 async def train_agent_task(agent_id: str, options: Dict[str, Any]):
@@ -228,6 +246,106 @@ async def predict(request: PredictionRequest):
     
     return prediction
 
+@app.post("/storm_data")
+async def get_storm_data(request: StormDataRequest):
+    """
+    Get comprehensive storm data including observations, forecasts, and risk analysis.
+    This centralizes data processing in the Python backend.
+    """
+    try:
+        # Debug logging to see what's being received
+        logger.info(f"Received request with coordinates: {request.coordinates}")
+        logger.info(f"Coordinates type: {type(request.coordinates)}")
+        logger.info(f"Full request: {request}")
+        
+        # Handle coordinates in various formats
+        coordinates = request.coordinates
+        if not coordinates:
+            raise HTTPException(status_code=400, detail="Coordinates are required")
+            
+        # Extract lat/lon from different possible formats
+        try:
+            if isinstance(coordinates, list):
+                if len(coordinates) >= 2:
+                    # [lon, lat] format
+                    lon, lat = float(coordinates[0]), float(coordinates[1])
+                else:
+                    raise ValueError("List coordinates must have at least 2 values")
+            elif isinstance(coordinates, dict):
+                # {lat: x, lon: y} format
+                lat = float(coordinates.get('lat', 0))
+                lon = float(coordinates.get('lon', 0))
+            else:
+                raise ValueError(f"Unsupported coordinates format: {type(coordinates)}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Coordinate parsing error: {e} for coordinates: {coordinates}")
+            raise HTTPException(status_code=422, detail=f"Unable to parse coordinates: {str(e)}")
+        
+        # Log what we've parsed
+        logger.info(f"Parsed coordinates: lat={lat}, lon={lon}")
+        
+        # Get weather observations
+        observations = await get_storm_observations(lat, lon, request.data_source, request.basin)
+        logger.info(f"Got observations: {observations}")
+        
+        # Create state object for prediction
+        current_state = {
+            "position": {"lat": lat, "lon": lon},
+            "wind_speed": observations.get("windSpeed", 75),
+            "pressure": observations.get("barometricPressure", 990),
+            "basin": request.basin,
+            "sea_surface_temp": {"value": observations.get("temperature", 28.5)}
+        }
+        logger.info(f"Created state object: {current_state}")
+        
+        # Get agent prediction with enhanced error handling
+        try:
+            agent_id = "default-hurricane-agent"
+            agent = trained_agents.get(agent_id)
+            
+            # If no trained agent exists, create a default one
+            if not agent:
+                logger.info("Creating new default agent")
+                agent = HurricanePredictionAgent()
+                trained_agents[agent_id] = agent
+            
+            logger.info("Calling agent.predict")
+            prediction = agent.predict(current_state, [])
+            logger.info(f"Agent prediction: {prediction}")
+        except Exception as e:
+            logger.error(f"Error in agent prediction: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            # Use a default prediction if agent fails
+            prediction = {
+                "position": {"lat": lat, "lon": lon},
+                "wind_speed": observations.get("windSpeed", 75),
+                "pressure": observations.get("barometricPressure", 990)
+            }
+            logger.info(f"Using default prediction: {prediction}")
+        
+        # Generate forecast from the prediction
+        forecast = generate_forecast_points(prediction, current_state)
+        
+        # Calculate risk level based on the forecast
+        risk_level = calculate_risk_level(prediction, observations)
+        
+        # Return all data needed by the frontend
+        return {
+            "observations": observations,
+            "forecast": forecast,
+            "riskLevel": risk_level,
+            "satelliteImagery": get_satellite_imagery(lat, lon),
+            "historicalData": generate_historical_data()
+        }
+            
+    except Exception as e:
+        logger.error(f"Error in get_storm_data: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/trained_agents")
 async def list_trained_agents():
     """List all trained agents."""
@@ -260,3 +378,102 @@ async def delete_agent(agent_id: str):
 async def root():
     """API health check."""
     return {"status": "healthy", "message": "Hurricane Prediction API is running"}
+
+# Helper functions for the storm_data endpoint
+async def get_storm_observations(lat, lon, data_source, basin):
+    """Get observations from appropriate weather data source."""
+    # For now, just return simulated data
+    # In a complete implementation, this would call external APIs
+    return {
+        "timestamp": "2025-04-15T00:00:00Z",
+        "temperature": 28.5,
+        "windSpeed": 75.0 + (random.random() * 30),
+        "windDirection": 120.0 + (random.random() * 60),
+        "barometricPressure": 985.0 + (random.random() * 15),
+        "relativeHumidity": 85.0 + (random.random() * 10)
+    }
+
+def generate_forecast_points(prediction, current_state):
+    """Generate forecast points for the UI from agent prediction."""
+    forecast = []
+    
+    # Generate points for the next 5 days (120 hours)
+    for hour in range(0, 121, 6):
+        day = hour // 24 + 1
+        
+        # Uncertainty increases with time
+        uncertainty_factor = min(0.5, 0.1 + ((hour / 24) * 0.1))
+        
+        # Base forecast on the prediction with increasing uncertainty
+        wind_speed = prediction.get("wind_speed", current_state.get("wind_speed", 75))
+        pressure = prediction.get("pressure", current_state.get("pressure", 990))
+        
+        # Calculate uncertainty ranges
+        wind_low = wind_speed * (1 - uncertainty_factor)
+        wind_high = wind_speed * (1 + uncertainty_factor)
+        
+        # Get position with interpolation over time
+        predicted_position = prediction.get("position", {})
+        current_position = current_state.get("position", {})
+        
+        # Calculate position at this forecast hour
+        if hour == 0:
+            position = current_position
+        else:
+            # Simple linear interpolation - in reality would be more complex
+            factor = min(1.0, hour / 24)  # Cap at 1.0 (24 hours)
+            lat = current_position.get("lat", 0) + (
+                (predicted_position.get("lat", 0) - current_position.get("lat", 0)) * factor
+            )
+            lon = current_position.get("lon", 0) + (
+                (predicted_position.get("lon", 0) - current_position.get("lon", 0)) * factor
+            )
+            position = {"lat": lat, "lon": lon}
+        
+        forecast.append({
+            "hour": hour,
+            "day": day,
+            "windSpeed": wind_speed,
+            "pressure": pressure,
+            "category": get_hurricane_category(wind_speed),
+            "windLow": wind_low,
+            "windHigh": wind_high,
+            "position": position,
+            "confidence": max(20, round(100 - (hour * 0.6)))
+        })
+    
+    return forecast
+
+def calculate_risk_level(prediction, observations):
+    """Calculate risk level based on prediction and observations."""
+    wind_speed = prediction.get("wind_speed", 0)
+    
+    if wind_speed > 130:
+        return "extreme"
+    elif wind_speed > 110:
+        return "high"
+    elif wind_speed > 74:
+        return "moderate"
+    else:
+        return "low"
+
+def get_satellite_imagery(lat, lon):
+    """Get satellite imagery for the specified location."""
+    # Simulated satellite imagery data
+    return {
+        "url": None,  # Would be a real image URL in production
+        "date": "2025-04-15",
+        "resolution": "250m"
+    }
+
+def generate_historical_data():
+    """Generate historical data for the storm."""
+    # For now, return simulated data
+    history = []
+    for i in range(-168, 0, 6):
+        history.append({
+            "hour": i,
+            "windSpeed": 50 + (random.random() * 30),
+            "pressure": 995 - (random.random() * 15)
+        })
+    return history
