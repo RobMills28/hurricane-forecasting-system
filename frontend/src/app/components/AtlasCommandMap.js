@@ -74,8 +74,9 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   const [filterCategory, setFilterCategory] = useState(null);
   const [filterRegion, setFilterRegion] = useState(null);
   const [filterStormType, setFilterStormType] = useState(null); // New filter for storm type
-  const [currentTimelineValue, setCurrentTimelineValue] = useState(0);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [currentTimelineValue, setCurrentTimelineValue] = useState(50); // Middle position (today)
+  const [timelineMode, setTimelineMode] = useState('present'); // 'past', 'present', or 'future'
   
   // Keep both base maps loaded but control opacity
   const [darkMapOpacity, setDarkMapOpacity] = useState(1);
@@ -221,6 +222,29 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
       
       return true;
     });
+  };
+
+  const getTimelineFilteredHurricanes = () => {
+    const filtered = getFilteredHurricanes();
+    
+    if (!filtered) return [];
+    
+    switch (timelineMode) {
+      case 'past':
+        // Past: Show only historical storms (for demo, use a subset of storms)
+        return filtered.filter((h, index) => index % 3 === 0); // Just an example filter
+      
+      case 'present':
+        // Present: Show all active storms
+        return filtered;
+      
+      case 'future':
+        // Future: Show forecasted storms (and fewer of them)
+        return filtered.filter(h => h.category > 1 || h.category === 'TS'); // Just an example
+      
+      default:
+        return filtered;
+    }
   };
   
   // Get hurricane color based on category and storm type
@@ -388,6 +412,20 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     }
   };
 
+  const handleTimelineChange = (e) => {
+    const newValue = parseInt(e.target.value);
+    setCurrentTimelineValue(newValue);
+    
+    // Determine timeline mode based on value
+    if (newValue < 30) {
+      setTimelineMode('past');
+    } else if (newValue > 70) {
+      setTimelineMode('future');
+    } else {
+      setTimelineMode('present');
+    }
+  };
+
   // Set active NASA layer
   const handleLayerSelect = (layer) => {
     // If removing layer
@@ -505,7 +543,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         )}
         
         {/* Hurricanes */}
-  {filteredHurricanes.map(hurricane => (
+  {getTimelineFilteredHurricanes().map(hurricane => (
     hurricane.coordinates && (
       <React.Fragment key={`marker-${hurricane.id}`}>
         {/* Main hurricane marker - Always using CircleMarker for consistent display */}
@@ -848,13 +886,13 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
             min="0"
             max="100"
             value={currentTimelineValue}
-            onChange={(e) => setCurrentTimelineValue(parseInt(e.target.value))}
+            onChange={handleTimelineChange}
             className="w-full"
           />
           
           <div className="flex justify-between text-xs text-gray-300 mt-1">
             <span>Past</span>
-            <span>Today</span>
+            <span>Today ({timelineMode})</span>
             <span>Future</span>
           </div>
         </div>
