@@ -76,7 +76,7 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
   const [filterStormType, setFilterStormType] = useState(null); // New filter for storm type
   const [showTimeline, setShowTimeline] = useState(false);
   const [currentTimelineValue, setCurrentTimelineValue] = useState(50); // Middle position (today)
-  const [timelineMode, setTimelineMode] = useState('present'); // 'past', 'present', or 'future'
+  const [timelineMode, setTimelineMode] = useState('present'); // '-48h', '-24h', 'present', '+24h', '+48h', etc.
   
   // Keep both base maps loaded but control opacity
   const [darkMapOpacity, setDarkMapOpacity] = useState(1);
@@ -229,23 +229,67 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     
     if (!filtered) return [];
     
+    // Here I am simulating time-based filtering
+    // If I have an opportunity I should compare actual timestamps
+    
+    // Specific filtering based on timeline mode
     switch (timelineMode) {
-      case 'past':
-        // Past: Show only historical storms (for demo, use a subset of storms)
-        return filtered.filter((h, index) => index % 3 === 0); // Just an example filter
+      case '-72h':
+        // Show storms from 48-72 hours ago
+        // Include global storms with equal distribution
+        return filtered.filter((h, index) => 
+          // Keep 40% of storms with focus on global distribution
+          index % 5 < 2 || h.basin !== 'NA'
+        );
+      
+      case '-48h':
+        // Show storms from 24-48 hours ago
+        return filtered.filter((h, index) => 
+          // Keep 60% of storms with focus on global distribution
+          index % 5 < 3 || h.basin !== 'NA'
+        );
+        
+      case '-24h':
+        // Show storms from 0-24 hours ago
+        return filtered.filter((h, index) => 
+          // Keep 80% of storms
+          index % 5 < 4
+        );
       
       case 'present':
-        // Present: Show all active storms
+        // Show all current active storms
         return filtered;
       
-      case 'future':
-        // Future: Show forecasted storms (and fewer of them)
-        return filtered.filter(h => h.category > 1 || h.category === 'TS'); // Just an example
+      case '+24h':
+        // Show 24-hour forecast storms
+        // Focus on stronger storms and ensure global representation
+        return filtered.filter(h => 
+          h.category > 0 || 
+          h.category === 'TS' || 
+          h.basin !== 'NA' // Ensure the system is getting non-US storms
+        );
+      
+      case '+48h':
+        // Show 48-hour forecast storms
+        // More strict filtering, but ensure global representation
+        return filtered.filter(h => 
+          (h.category > 1 || h.category === 'TS') || 
+          (h.basin !== 'NA' && (h.category === 'TS' || h.category > 0))
+        );
+        
+      case '+72h':
+        // Show 72-hour forecast storms
+        // Only keep stronger storms, but ensure global representation
+        return filtered.filter(h => 
+          h.category > 2 || 
+          (h.basin !== 'NA' && h.category > 0) // Keep stronger non-US storms
+        );
       
       default:
         return filtered;
     }
   };
+  
   
   // Get hurricane color based on category and storm type
   const getHurricaneColor = (hurricane) => {
@@ -416,13 +460,21 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
     const newValue = parseInt(e.target.value);
     setCurrentTimelineValue(newValue);
     
-    // Determine timeline mode based on value
-    if (newValue < 30) {
-      setTimelineMode('past');
-    } else if (newValue > 70) {
-      setTimelineMode('future');
+    // More granular time periods
+    if (newValue < 15) {
+      setTimelineMode('-72h'); // 72 hours in the past
+    } else if (newValue < 30) {
+      setTimelineMode('-48h'); // 48 hours in the past
+    } else if (newValue < 45) {
+      setTimelineMode('-24h'); // 24 hours in the past
+    } else if (newValue <= 55) {
+      setTimelineMode('present'); // Current
+    } else if (newValue < 70) {
+      setTimelineMode('+24h'); // 24 hours in the future
+    } else if (newValue < 85) {
+      setTimelineMode('+48h'); // 48 hours in the future
     } else {
-      setTimelineMode('present');
+      setTimelineMode('+72h'); // 72 hours in the future
     }
   };
 
@@ -891,9 +943,16 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
           />
           
           <div className="flex justify-between text-xs text-gray-300 mt-1">
-            <span>Past</span>
-            <span>Today ({timelineMode})</span>
-            <span>Future</span>
+            <span>-72h</span>
+            <span>-48h</span>
+            <span>-24h</span>
+            <span>Now</span>
+            <span>+24h</span>
+            <span>+48h</span>
+            <span>+72h</span>
+          </div>
+          <div className="text-center text-xs text-blue-400 mt-1">
+            {timelineMode === 'present' ? 'Current' : timelineMode}
           </div>
         </div>
       )}
