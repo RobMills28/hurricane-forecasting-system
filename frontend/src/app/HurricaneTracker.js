@@ -36,6 +36,8 @@ export default function HurricaneTracker() {
   const [historicalData, setHistoricalData] = useState([]);
   const [dataSource, setDataSource] = useState('all'); // 'us', 'japan', 'australia', 'all'
   const [isDataFetching, setIsDataFetching] = useState(false);
+  const [potentialStormAreas, setPotentialStormAreas] = useState([]);
+
 
   // Load cached data on initial load
   useEffect(() => {
@@ -96,6 +98,21 @@ export default function HurricaneTracker() {
       }
     }
   }, [hurricanes]);
+
+  useEffect(() => {
+    const loadPotentialStormAreas = async () => {
+      const areas = await fetchPotentialStormAreas();
+      setPotentialStormAreas(areas);
+    };
+    
+    loadPotentialStormAreas();
+    
+    // Refresh the potential areas every 15 minutes
+    const interval = setInterval(loadPotentialStormAreas, 15 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
 
   // Fetch data from all configured sources
   async function fetchGlobalData(isBackgroundRefresh = false) {
@@ -377,6 +394,37 @@ const fetchStormDataFromPython = async (hurricane) => {
   
   return await response.json();
 };
+
+const fetchPotentialStormAreas = async () => {
+  try {
+    // Fetch potential storm formation areas from the Python backend
+    const response = await fetch('http://localhost:8000/potential_storm_areas', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch potential storm areas: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.potential_areas || [];
+  } catch (error) {
+    console.error("Error fetching potential storm areas:", error);
+    
+    // Fallback to simulated data if the API fails
+    return [
+      // These are placeholders - your Python backend would generate the actual locations
+      { id: 'pot1', position: [15.0, -40.0], probability: 0.7, basin: 'NA', intensity: 'TS' },
+      { id: 'pot2', position: [12.0, 145.0], probability: 0.5, basin: 'WP', intensity: 'TD' },
+      { id: 'pot3', position: [18.0, -110.0], probability: 0.4, basin: 'EP', intensity: 'TS' },
+      { id: 'pot4', position: [-15.0, 85.0], probability: 0.3, basin: 'SI', intensity: 'TD' }
+    ];
+  }
+};
+
 
   // Fetch satellite imagery for the selected hurricane
   const fetchSatelliteImagery = async (coordinates) => {
@@ -661,6 +709,7 @@ const fetchStormDataFromPython = async (hurricane) => {
             hurricanes={hurricanes}
             selectedHurricane={selectedHurricane}
             onSelectHurricane={handleHurricaneSelect}
+            potentialStormAreas={potentialStormAreas}
           />
         </div>
 

@@ -60,7 +60,7 @@ const preloadImage = (url) => {
   });
 };
 
-const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) => {
+  const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane, potentialStormAreas = [] }) => {
   const [animationFrame, setAnimationFrame] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [nasaLayers, setNasaLayers] = useState([]);
@@ -289,8 +289,50 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         return filtered;
     }
   };
-  
-  
+
+  const getVisiblePotentialStormAreas = () => {
+    // Only show potential areas in future modes
+    if (!timelineMode.startsWith('+')) {
+      return [];
+    }
+    
+    // Parse the hour value from timelineMode
+    const hourValue = parseInt(timelineMode.replace('+', ''));
+    
+    // Filter areas based on probability threshold that changes with time
+    // Further in the future = show more areas with lower probability
+    let probabilityThreshold;
+    
+    if (hourValue <= 24) {
+      probabilityThreshold = 0.6; // Only high probability areas for near future
+    } else if (hourValue <= 48) {
+      probabilityThreshold = 0.4; // Medium probability for mid-future
+    } else {
+      probabilityThreshold = 0.2; // Lower probability for far future
+    }
+    
+    return potentialStormAreas.filter(area => area.probability >= probabilityThreshold);
+  };
+
+  const getPulseAnimationClass = (probability) => {
+    // Animation is stronger for higher probability areas
+    const intensityClass = probability > 0.6 ? 'bg-red-500' : 
+                          probability > 0.4 ? 'bg-orange-500' : 'bg-yellow-500';
+    
+    // Use animation frame to create pulse effect
+    const frame = animationFrame % 60;
+    
+    if (frame < 15) {
+      return `${intensityClass} opacity-30 scale-75`;
+    } else if (frame < 30) {
+      return `${intensityClass} opacity-60 scale-100`;
+    } else if (frame < 45) {
+      return `${intensityClass} opacity-90 scale-125`;
+    } else {
+      return `${intensityClass} opacity-60 scale-100`;
+    }
+  };  
+    
   // Get hurricane color based on category and storm type
   const getHurricaneColor = (hurricane) => {
     // Check for storm type first
@@ -688,6 +730,35 @@ const AtlasCommandMap = ({ hurricanes, selectedHurricane, onSelectHurricane }) =
         </React.Fragment>
       )
     ))}
+      {/* Render potential storm formation areas */}
+        {getVisiblePotentialStormAreas().map(area => (
+          <CircleMarker
+            key={`potential-${area.id}`}
+            center={[area.position[0], area.position[1]]}
+            radius={12} // Make them larger, like in your screenshot
+            pathOptions={{
+              color: '#ffffff',
+              weight: 1,
+              fillColor: area.probability > 0.6 ? '#FF5050' : 
+                        area.probability > 0.4 ? '#FF9933' : '#FFDE33',
+              fillOpacity: (animationFrame % 60) < 30 ? 0.4 : 0.8,
+              className: 'animate-pulse' // Add pulse animation if you have Tailwind
+            }}
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -5]}
+              opacity={0.9}
+            >
+              <div className="px-2 py-1">
+                <p className="font-bold">Potential Storm Formation</p>
+                <p className="text-sm">Probability: {Math.round(area.probability * 100)}%</p>
+                <p className="text-sm">Potential Intensity: {area.intensity}</p>
+                <p className="text-sm">Basin: {area.basin}</p>
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        ))}
       </MapContainer>
       
       {/* Control Panel */}
