@@ -25,6 +25,13 @@ from .agent import HurricanePredictionAgent, ReplayBuffer
 from .data import fetch_historical_hurricane_data, preprocess_data_for_training
 from .utils import get_hurricane_category, safe_get
 
+# Openmeteo imports
+from .openmeteo_connector import (
+    fetch_open_meteo_data,
+    get_active_hurricanes_by_region
+)
+
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hurricane_agents.api")
@@ -279,7 +286,6 @@ async def get_storm_data(request: StormDataRequest):
     try:
         # Debug logging to see what's being received
         logger.info(f"Received request with coordinates: {request.coordinates}")
-        logger.info(f"Coordinates type: {type(request.coordinates)}")
         logger.info(f"Full request: {request}")
         
         # Handle coordinates in various formats
@@ -308,16 +314,60 @@ async def get_storm_data(request: StormDataRequest):
         # Log what we've parsed
         logger.info(f"Parsed coordinates: lat={lat}, lon={lon}")
         
-        # Get weather observations
-        observations = await get_storm_observations(lat, lon, request.data_source, request.basin)
-        logger.info(f"Got observations: {observations}")
+        # Determine the data source based on region or request
+        # For US regions, use NOAA. For others, use OpenMeteo
+        data_source = request.data_source
+        basin = request.basin or determine_basin(lon, lat)
+        
+        # Determine if this is a US-based storm
+        is_us_storm = is_in_us_region(lat, lon)
+        
+        # If data source wasn't specified, choose based on region
+        if not data_source:
+            data_source = 'noaa' if is_us_storm else 'openmeteo'
+        
+        # Get observations from the appropriate source
+        if data_source.lower() == 'openmeteo' or (not is_us_storm and data_source.lower() != 'noaa'):
+            # Use OpenMeteo for non-US regions
+            logger.info(f"Using OpenMeteo data for non-US coordinates: {lat}, {lon}")
+            try:
+                storm_data = await fetch_open_meteo_data(lat, lon, basin)
+                
+                # If it failed, still try NOAA as fallback
+                if 'error' in storm_data:
+                    logger.warning(f"OpenMeteo failed, falling back to NOAA: {storm_data.get('message')}")
+                    observations = await get_hurricane_observations(lat, lon)
+                else:
+                    # Use OpenMeteo data
+                    observations = storm_data.get('observations')
+                    forecast_data = storm_data.get('forecast', [])
+                    risk_level = storm_data.get('riskLevel', 'moderate')
+                    
+                    # If we have forecast data from OpenMeteo, use it directly
+                    if forecast_data:
+                        logger.info(f"Using OpenMeteo forecast data with {len(forecast_data)} points")
+                        return {
+                            "observations": observations,
+                            "forecast": forecast_data,
+                            "riskLevel": risk_level,
+                            "satelliteImagery": get_satellite_imagery(lat, lon),
+                            "historicalData": generate_historical_data()
+                        }
+            except Exception as e:
+                logger.error(f"Error getting OpenMeteo data: {e}")
+                # Fall back to NOAA
+                observations = await get_hurricane_observations(lat, lon)
+        else:
+            # Use NOAA for US regions
+            logger.info(f"Using NOAA data for US coordinates: {lat}, {lon}")
+            observations = await get_hurricane_observations(lat, lon)
         
         # Create state object for prediction
         current_state = {
             "position": {"lat": lat, "lon": lon},
             "wind_speed": observations.get("windSpeed", 75),
             "pressure": observations.get("barometricPressure", 990),
-            "basin": request.basin,
+            "basin": basin,
             "sea_surface_temp": {"value": observations.get("temperature", 28.5)}
         }
         logger.info(f"Created state object: {current_state}")
@@ -429,6 +479,74 @@ async def get_potential_storm_areas():
             "potential_areas": generate_simulated_formation_areas()
         }
 
+@app.get("/global_storms")
+async def get_global_storms(region: str = "GLOBAL"):
+    """
+    Get active hurricanes and severe storms globally or by region
+    
+    Args:
+        region: Optional ocean basin code (NA, EP, WP, NI, SI, SP)
+        
+    Returns:
+        List of active storms
+    """
+    try:
+        logger.info(f"Fetching global storms for region: {region}")
+        
+        # Get US storms from NOAA
+        us_storms = []
+        try:
+            us_storms = await get_active_hurricanes()
+            logger.info(f"Found {len(us_storms)} US storms from NOAA")
+        except Exception as e:
+            logger.error(f"Error fetching US storms: {e}")
+        
+        # Get global storms from OpenMeteo
+        global_storms = []
+        try:
+            global_storms = await get_active_hurricanes_by_region(region)
+            logger.info(f"Found {len(global_storms)} global storms from OpenMeteo")
+        except Exception as e:
+            logger.error(f"Error fetching global storms: {e}")
+        
+        # Combine storms, removing duplicates based on coordinates proximity
+        all_storms = us_storms + global_storms
+        unique_storms = []
+        processed_coords = set()
+        
+        # Sort by category strength (highest first) and prefer NOAA sources over OpenMeteo
+        sorted_storms = sorted(
+            all_storms, 
+            key=lambda s: (
+                # Priority by category (higher first)
+                -int(s.get('category') if s.get('category') not in ['TD', 'TS'] else 0),
+                # Then prefer NOAA sources over OpenMeteo
+                0 if s.get('dataSource') == 'NOAA' else 1
+            )
+        )
+        
+        # Filter based on coordinate proximity (2-degree grid cells)
+        for storm in sorted_storms:
+            if not storm.get('coordinates'):
+                continue
+                
+            # Get grid cell for coordinates
+            coords = storm.get('coordinates')
+            if len(coords) < 2:
+                continue
+                
+            lon, lat = coords[0], coords[1]
+            grid_key = f"{int(lat/2)*2}_{int(lon/2)*2}"
+            
+            if grid_key not in processed_coords:
+                unique_storms.append(storm)
+                processed_coords.add(grid_key)
+        
+        return {"storms": unique_storms}
+    except Exception as e:
+        logger.error(f"Error in get_global_storms: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Helper functions for the storm_data endpoint
 async def get_storm_observations(lat, lon, data_source, basin):
     """Get observations from appropriate weather data source."""
@@ -493,6 +611,31 @@ def generate_forecast_points(prediction, current_state):
         })
     
     return forecast
+
+# Helper function to determine if coordinates are in US region
+def is_in_us_region(lat: float, lon: float) -> bool:
+    """Check if coordinates are in US regions (including territories)"""
+    # Continental US
+    if 24.0 <= lat <= 50.0 and -125.0 <= lon <= -66.0:
+        return True
+    
+    # Alaska
+    if 51.0 <= lat <= 72.0 and -170.0 <= lon <= -130.0:
+        return True
+    
+    # Hawaii
+    if 18.0 <= lat <= 23.0 and -161.0 <= lon <= -154.0:
+        return True
+    
+    # Puerto Rico and US Virgin Islands
+    if 17.5 <= lat <= 18.5 and -67.5 <= lon <= -64.5:
+        return True
+    
+    # Guam and Northern Mariana Islands
+    if 13.0 <= lat <= 21.0 and 144.0 <= lon <= 146.0:
+        return True
+    
+    return False
 
 def calculate_risk_level(prediction, observations):
     """Calculate risk level based on prediction and observations."""
@@ -782,3 +925,8 @@ def generate_simulated_formation_areas():
     
     # Return a subset to avoid too many points
     return random.sample(potential_areas, min(5, len(potential_areas)))
+
+# Create an alias for backward compatibility
+async def get_hurricane_observations(lat, lon, data_source=None, basin=None):
+    """Alias for get_storm_observations to maintain backward compatibility"""
+    return await get_storm_observations(lat, lon, data_source, basin)
