@@ -2,7 +2,7 @@
 Hurricane Prediction Environment
 
 This module provides an environment for hurricane trajectory and intensity prediction
-using real-world data and sophisticated modeling techniques.
+using real-world data and reinforcement learning compatibility.
 """
 
 import numpy as np
@@ -15,9 +15,7 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 class HurricaneEnvironment:
     """
     Environment for hurricane prediction that simulates hurricane development
-    and provides an interface for agents to interact with.
-    
-    This is the Python equivalent of the JavaScript HurricaneEnvironment class.
+    and provides a reinforcement learning interface for agents.
     """
     
     def __init__(self):
@@ -25,9 +23,11 @@ class HurricaneEnvironment:
         self.hurricane_data = []  # Historical hurricane data
         self.nasa_data = {}       # NASA data layers (sea surface temp, etc.)
         self.current_state = None
+        self.previous_state = None  # Track previous state for reward calculation
         self.time_step = 0        # Current time step in the simulation
         self.history = []         # Track agent predictions for evaluation
         self.basin_models = {}    # Basin-specific models for regional specialization
+        self.action_space_size = 15  # 5 latitude dirs x 3 longitude dirs x 1 intensity
     
     async def initialize(self, historical_data: List[Dict], nasa_data_service: Dict) -> Dict:
         """
@@ -51,6 +51,7 @@ class HurricaneEnvironment:
     
     def organize_data_by_basin(self) -> None:
         """Organize hurricane data by basin for specialized training."""
+        # [Existing implementation - no changes needed]
         basin_data = {}
         
         for hurricane in self.hurricane_data:
@@ -77,6 +78,7 @@ class HurricaneEnvironment:
         if not self.hurricane_data:
             # Create dummy data if no historical data available
             self.current_state = self._create_dummy_state()
+            self.previous_state = None
             return self.get_state()
             
         random_index = random.randint(0, len(self.hurricane_data) - 1)
@@ -96,6 +98,7 @@ class HurricaneEnvironment:
             "actual": selected_hurricane.get("track")  # Full track data for evaluation
         }
         
+        self.previous_state = None
         self.time_step = 0
         self.history = []
         
@@ -103,6 +106,7 @@ class HurricaneEnvironment:
     
     def _create_dummy_state(self) -> Dict:
         """Create a dummy state for testing when no data is available."""
+        # [Existing implementation - no changes needed]
         return {
             "hurricane_id": "dummy_hurricane",
             "name": "Test Hurricane",
@@ -119,15 +123,8 @@ class HurricaneEnvironment:
         }
     
     def get_nasa_data_for_location(self, position: Dict) -> Dict:
-        """
-        Get NASA data for a specific location.
-        
-        Args:
-            position: Dictionary with lat/lon coordinates
-            
-        Returns:
-            NASA data for the location
-        """
+        """Get NASA data for a specific location."""
+        # [Existing implementation - no changes needed]
         if not position or not hasattr(self.nasa_data, 'get_gibs_layers'):
             # Default values if NASA data service not available
             return {
@@ -150,16 +147,8 @@ class HurricaneEnvironment:
             }
     
     def estimate_sea_surface_temp_for_location(self, position: Dict) -> float:
-        """
-        Estimate sea surface temperature for a location based on position and season.
-        This is a simplified model until we integrate real-time NASA data.
-        
-        Args:
-            position: Dictionary with lat/lon coordinates
-            
-        Returns:
-            Estimated sea surface temperature in degrees Celsius
-        """
+        """Estimate sea surface temperature for a location based on position and season."""
+        # [Existing implementation - no changes needed]
         if not position:
             return 28.0  # Default value
         
@@ -255,6 +244,9 @@ class HurricaneEnvironment:
         Returns:
             Dict containing new state, reward, and done flag
         """
+        # Store current state as previous state
+        self.previous_state = {**self.current_state}
+        
         # Record the agent's prediction
         self.history.append({
             "time_step": self.time_step,
@@ -359,23 +351,19 @@ class HurricaneEnvironment:
             intensity_weight = 0.5
             pressure_weight = 0.1
         
-        return (
+        # Calculate weighted reward
+        total_reward = (
             position_reward * position_weight + 
             intensity_reward * intensity_weight + 
             pressure_reward * pressure_weight
         )
+        
+        # Scale reward to a more appropriate range for RL (0-1 rather than 0-100)
+        return total_reward / 100.0
     
     def calculate_distance(self, pos1: Optional[Dict], pos2: Optional[Dict]) -> float:
-        """
-        Calculate distance between two geographic points (in km).
-        
-        Args:
-            pos1: First position with lat/lon
-            pos2: Second position with lat/lon
-            
-        Returns:
-            Distance in kilometers
-        """
+        """Calculate distance between two geographic points (in km)."""
+        # [Existing implementation - no changes needed]
         if not pos1 or not pos2:
             return 1000.0  # Large error if positions missing
         
@@ -402,12 +390,8 @@ class HurricaneEnvironment:
         return deg * (math.pi / 180)
     
     def evaluate_performance(self) -> Dict:
-        """
-        Evaluate agent performance over an episode.
-        
-        Returns:
-            Dictionary with performance metrics
-        """
+        """Evaluate agent performance over an episode."""
+        # [Existing implementation - no changes needed]
         # Calculate average position and intensity errors
         errors = []
         for record in self.history:

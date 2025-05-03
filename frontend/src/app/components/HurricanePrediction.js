@@ -36,11 +36,11 @@ useEffect(() => {
   fetchPrediction();
 }, [selectedHurricane]);
   
-// Generate prediction data from Python backend
+// Generate prediction data from Python backend using RL agent
 const generatePrediction = async () => {
   if (!selectedHurricane) return;
   
-  console.log("Generating prediction using Python API");
+  console.log("Generating prediction using Python RL API");
   setLoading(true);
   
   try {
@@ -55,10 +55,11 @@ const generatePrediction = async () => {
       basin: selectedHurricane.basin,
       sea_surface_temp: {
         value: 28.5 // This would typically come from actual data
-      }
+      },
+      time_step: 0 // Initial time step
     };
     
-    // Prepare history data if available - this helps the Python model with predictions
+    // Prepare history data if available
     const history = [];
     // In a full implementation, we would include recent track history
     
@@ -68,19 +69,19 @@ const generatePrediction = async () => {
       state: currentState
     });
     
-    // Get predictions from the Python backend using the agent
+    // Get predictions from the Python backend using the RL agent
     const agentId = 'default-hurricane-agent';
     console.log("Calling Python API with agent:", agentId);
     
     const result = await makeAPIPrediction(agentId, currentState, history);
-    console.log("API response received:", result);
+    console.log("RL API response received:", result);
     
     if (!result || typeof result !== 'object') {
       throw new Error("Invalid API response format");
     }
     
-    // Extract the main prediction from Python
-    const pythonPrediction = {
+    // Extract the RL prediction
+    const rlPrediction = {
       position: result.position || null,
       wind_speed: result.wind_speed || 0,
       pressure: result.pressure || 0,
@@ -88,22 +89,20 @@ const generatePrediction = async () => {
       uncertainty: result.uncertainty || null
     };
     
-    console.log("Using Python prediction:", pythonPrediction);
+    console.log("Using RL prediction:", rlPrediction);
     
-    // Create forecast points for the UI
-    // In a future version, the Python backend would return the complete forecast
-    // but for now we'll generate the points based on the single prediction
+    // Generate forecast points for the UI based on the RL prediction
     const forecast = [];
     
-    // Base values for forecasting
-    const baseWindSpeed = pythonPrediction.wind_speed || selectedHurricane.windSpeed || 85;
-    const basePressure = pythonPrediction.pressure || selectedHurricane.pressure || 980;
-    const basePosition = pythonPrediction.position || {
+    // Base values from the RL prediction
+    const baseWindSpeed = rlPrediction.wind_speed || selectedHurricane.windSpeed || 85;
+    const basePressure = rlPrediction.pressure || selectedHurricane.pressure || 980;
+    const basePosition = rlPrediction.position || {
       lat: selectedHurricane.coordinates?.[1] || 0,
       lon: selectedHurricane.coordinates?.[0] || 0
     };
     
-    // Generate forecast track based on the Python prediction
+    // Generate forecast track based on the RL prediction
     for (let hour = 0; hour <= 120; hour += 6) {
       const day = Math.floor(hour / 24) + 1;
       const forecastHourFactor = hour / 24;  // Convert to days
@@ -111,30 +110,28 @@ const generatePrediction = async () => {
       // Calculate uncertainty that increases with forecast time
       const uncertaintyFactor = Math.min(0.5, 0.1 + (forecastHourFactor * 0.1));
       
-      // Apply the Python prediction with increasing uncertainty over time
-      // Near-term forecast (closer to current time) relies more on Python prediction
-      // Far-term forecast incorporates more trend-based extrapolation
+      // Apply the RL prediction with increasing uncertainty over time
       const reliance = Math.max(0, 1 - (forecastHourFactor * 0.2));
       
       // Calculate position with increasing spread over time
       let lat = basePosition.lat;
       let lon = basePosition.lon;
       
-      if (pythonPrediction.position) {
+      if (rlPrediction.position) {
         // Add movement direction from the prediction with increasing spread
-        const latChange = (pythonPrediction.position.lat - selectedHurricane.coordinates[1]) * reliance;
-        const lonChange = (pythonPrediction.position.lon - selectedHurricane.coordinates[0]) * reliance;
+        const latChange = (rlPrediction.position.lat - selectedHurricane.coordinates[1]) * reliance;
+        const lonChange = (rlPrediction.position.lon - selectedHurricane.coordinates[0]) * reliance;
         
         lat = selectedHurricane.coordinates[1] + (latChange * forecastHourFactor * 2);
         lon = selectedHurricane.coordinates[0] + (lonChange * forecastHourFactor * 2);
       }
       
-      // Calculate intensity values influenced by the Python prediction
+      // Calculate intensity values influenced by the RL prediction
       let windSpeed = baseWindSpeed;
       let pressure = basePressure;
       
-      // Use Python uncertainty if available
-      const windUncertainty = pythonPrediction.uncertainty?.wind_speed || (baseWindSpeed * uncertaintyFactor);
+      // Use RL uncertainty if available
+      const windUncertainty = rlPrediction.uncertainty?.wind_speed || (baseWindSpeed * uncertaintyFactor);
       const windLow = baseWindSpeed - windUncertainty;
       const windHigh = baseWindSpeed + windUncertainty;
       
@@ -165,12 +162,95 @@ const generatePrediction = async () => {
     generatePredictionSummary(forecast);
     
   } catch (error) {
-    console.error('Error getting prediction from API:', error);
+    console.error('Error getting prediction from RL API:', error);
     
     // Fallback to original method if API fails
     console.log("Falling back to JavaScript prediction");
-    // [Fallback code remains the same as before]
-    // ...
+
+    // Create forecast points without the RL prediction
+    const forecast = [];
+
+    // Use hurricane's current values as base
+    const baseWindSpeed = selectedHurricane.windSpeed || 75;
+    const basePressure = selectedHurricane.pressure || 990;
+    const basePosition = {
+      lat: selectedHurricane.coordinates?.[1] || 0,
+      lon: selectedHurricane.coordinates?.[0] || 0
+    };
+
+    // Generate forecast track using traditional methods
+    for (let hour = 0; hour <= 120; hour += 6) {
+      const day = Math.floor(hour / 24) + 1;
+      const forecastHourFactor = hour / 24;  // Convert to days
+      
+      // Calculate uncertainty that increases with forecast time
+      const uncertaintyFactor = Math.min(0.5, 0.1 + (forecastHourFactor * 0.1));
+      
+      // Simple linear extrapolation for track
+      // For Atlantic hurricanes, typically move NW then recurve NE
+      let lat = basePosition.lat;
+      let lon = basePosition.lon;
+      
+      // Apply simplified movement model
+      if (basePosition.lat < 25) {
+        // Moving northwest in tropics
+        lat += 0.2 * forecastHourFactor * day;
+        lon -= 0.3 * forecastHourFactor * day;
+      } else {
+        // Recurving northeast in higher latitudes
+        lat += 0.3 * forecastHourFactor * day;
+        lon += 0.2 * forecastHourFactor * day;
+      }
+      
+      // Simple intensity model (intensify, peak, weaken)
+      let windSpeed = baseWindSpeed;
+      if (hour < 36) {
+        // Intensification phase
+        windSpeed += 5 * forecastHourFactor * day;
+      } else if (hour < 72) {
+        // Peak intensity
+        windSpeed += 2 * forecastHourFactor;
+      } else {
+        // Weakening phase
+        windSpeed -= 3 * forecastHourFactor;
+      }
+      
+      // Ensure wind speed is positive
+      windSpeed = Math.max(30, windSpeed);
+      
+      // Calculate pressure based on wind speed
+      const pressure = 1010 - (windSpeed / 1.15)**2/100;
+      
+      // Calculate uncertainty ranges
+      const windLow = windSpeed * (1 - uncertaintyFactor);
+      const windHigh = windSpeed * (1 + uncertaintyFactor);
+      
+      forecast.push({
+        hour,
+        day,
+        windSpeed,
+        pressure,
+        category: getHurricaneCategory(windSpeed),
+        windLow,
+        windHigh,
+        uncertaintyRange: [windLow, windHigh],
+        confidence: Math.max(20, Math.round(100 - (hour * 0.6))),
+        position: { lat, lon }
+      });
+    }
+
+    // Update state with the forecast
+    setPredictionData(forecast);
+
+    // Generate ensemble data
+    generateEnsembleData(forecast);
+
+    // Generate confidence data
+    generateConfidenceData(forecast);
+
+    // Generate prediction summary
+    generatePredictionSummary(forecast);
+    
   } finally {
     setLoading(false);
   }

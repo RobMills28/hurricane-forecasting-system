@@ -3,7 +3,8 @@ API server for hurricane prediction models
 
 This module provides an interface between the JavaScript frontend and Python backend.
 """
-
+import torch
+from .agent import HurricanePredictionAgent, ReplayBuffer
 import pandas as pd
 from .utils import determine_basin
 import asyncio
@@ -16,10 +17,11 @@ from typing import Dict, List, Any, Optional
 from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import torch
 
 # Import our hurricane agents components
 from .environment import HurricaneEnvironment
-from .agent import HurricanePredictionAgent
+from .agent import HurricanePredictionAgent, ReplayBuffer
 from .data import fetch_historical_hurricane_data, preprocess_data_for_training
 from .utils import get_hurricane_category, safe_get
 
@@ -84,7 +86,7 @@ class StormDataRequest(BaseModel):
 
 # Background task to train an agent
 async def train_agent_task(agent_id: str, options: Dict[str, Any]):
-    """Background task to train an agent."""
+    """Background task to train an agent using reinforcement learning."""
     try:
         logger.info(f"Starting training for agent {agent_id}")
         training_tasks[agent_id]["status"] = "loading_data"
@@ -107,37 +109,48 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
             "use_basin_models": options.get("use_basin_models", True),
             "use_dynamic_weights": options.get("use_dynamic_weights", True),
             "ensemble_size": options.get("ensemble_size", 5),
+            "state_dim": 10,  # Adjust based on state representation
+            "action_dim": 15   # 5 lat dirs x 3 lon dirs x 1 intensity
         }
         agent = HurricanePredictionAgent(agent_options)
         
-        # Train agent
+        # Train agent using reinforcement learning
         training_tasks[agent_id]["status"] = "training"
         episodes = options.get("episodes", 100)
         
         # Update progress as training proceeds
         for episode in range(1, episodes + 1):
             # Reset for this episode
-            environment.reset()
+            state = environment.reset()
             
             done = False
-            history = []
+            total_reward = 0
             
             # Episode loop
             while not done:
-                current_state = environment.get_state()
-                action = agent.predict(current_state, history)
+                # Make prediction based on current state
+                action = agent.predict(state, [], training=True)
+                
+                # Take action and observe result
                 result = environment.step(action)
                 next_state = result.get("state", {})
                 reward = result.get("reward", 0)
                 done = result.get("done", False)
                 
-                history.append({"state": current_state, "action": action})
+                # Update agent using reinforcement learning
+                agent.update(state, action, reward, next_state, done)
                 
-                actual = environment.get_actual_for_time_step(environment.time_step)
-                agent.update(action, actual, reward)
+                # Track total reward
+                total_reward += reward
+                
+                # Update state
+                state = next_state
             
             # Evaluate performance
             episode_performance = environment.evaluate_performance()
+            
+            # Update training metrics
+            episode_performance["episode_reward"] = total_reward
             
             # Update progress
             training_tasks[agent_id]["progress"] = episode / episodes
@@ -147,6 +160,7 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
             if episode % 10 == 0 or episode == 1 or episode == episodes:
                 logger.info(
                     f"Episode {episode}/{episodes} - "
+                    f"Reward: {total_reward:.2f}, "
                     f"Avg Position Error: {episode_performance.get('avg_pos_error', 0):.2f} km, "
                     f"Avg Intensity Error: {episode_performance.get('avg_intensity_error', 0):.2f} mph"
                 )
@@ -161,6 +175,8 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
         
     except Exception as e:
         logger.error(f"Error training agent {agent_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         training_tasks[agent_id]["status"] = "failed"
         training_tasks[agent_id]["error"] = str(e)
 
@@ -240,7 +256,13 @@ async def predict(request: PredictionRequest):
         )
     
     agent = trained_agents[agent_id]
-    prediction = agent.predict(request.current_state, request.history)
+    
+    # Convert the request state and history to the format expected by the agent
+    state = request.current_state
+    history = request.history
+    
+    # Make prediction (not in training mode)
+    prediction = agent.predict(state, history, training=False)
     
     # Add hurricane category based on wind speed
     if "wind_speed" in prediction:

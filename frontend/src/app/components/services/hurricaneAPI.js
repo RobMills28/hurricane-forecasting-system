@@ -74,6 +74,8 @@ export async function getTrainingStatus(agentId) {
  */
 export async function makePrediction(agentId, currentState, history = []) {
   try {
+    console.log("Making RL prediction request to API with agent:", agentId);
+    
     const response = await fetch(`${API_BASE_URL}/predict`, {
       method: 'POST',
       headers: {
@@ -91,9 +93,12 @@ export async function makePrediction(agentId, currentState, history = []) {
       throw new Error(`Failed to make prediction: ${response.status} - ${errorText}`);
     }
     
-    return await response.json();
+    const result = await response.json();
+    console.log("RL prediction result from API:", result);
+    
+    return result;
   } catch (error) {
-    console.error('Error making prediction:', error);
+    console.error('Error making RL prediction:', error);
     throw error;
   }
 }
