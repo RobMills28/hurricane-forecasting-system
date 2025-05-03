@@ -90,7 +90,7 @@ class HurricanePredictionAgent:
             "batch_size": 64,               # Batch size for training
             "update_frequency": 4,          # How often to update the network
             "target_update_frequency": 1000, # How often to update target network
-            "state_dim": 10,                # State dimension
+            "state_dim": 12,                # State dimension
             "action_dim": 15                # Action dimension (5 lat dirs, 3 lon dirs, 1 intensity)
         }
         

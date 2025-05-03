@@ -109,7 +109,7 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
             "use_basin_models": options.get("use_basin_models", True),
             "use_dynamic_weights": options.get("use_dynamic_weights", True),
             "ensemble_size": options.get("ensemble_size", 5),
-            "state_dim": 10,  # Adjust based on state representation
+            "state_dim": 12,  # Adjust based on state representation
             "action_dim": 15   # 5 lat dirs x 3 lon dirs x 1 intensity
         }
         agent = HurricanePredictionAgent(agent_options)
