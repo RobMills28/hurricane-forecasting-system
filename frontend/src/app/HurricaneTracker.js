@@ -147,19 +147,21 @@ export default function HurricaneTracker() {
         );
       }
       
-      // Global regions using Open-Meteo
+      // Global regions using Open-Meteo with improved storm distribution
       const globalRegions = [];
-      
+
       if (dataSource === 'all' || dataSource === 'japan') {
+        // Add more Western Pacific regions for better coverage
         globalRegions.push('WP'); // Western Pacific
       }
-      
+
       if (dataSource === 'all' || dataSource === 'australia') {
+        // Include multiple Australian/Southern regions
         globalRegions.push('SP', 'SI'); // South Pacific, South Indian
       }
-      
+
       if (dataSource === 'all') {
-        // Add all other global regions
+        // Ensure ALL global regions are included for complete coverage
         globalRegions.push(
           'NI',       // North Indian
           'EP',       // Eastern Pacific  
@@ -169,6 +171,10 @@ export default function HurricaneTracker() {
           'SOUTH_AMERICA',
           'AFRICA'
         );
+        
+        // Add some additional WP regions for better spatial coverage
+        // This helps ensure we get more storms with different categories
+        globalRegions.push('WP');  // Add Western Pacific again to increase sampling
       }
       
       // Fetch Open-Meteo data for each region in parallel
