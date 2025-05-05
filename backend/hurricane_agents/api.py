@@ -27,12 +27,12 @@ from .agent import HurricanePredictionAgent, ReplayBuffer
 from .data import fetch_historical_hurricane_data, preprocess_data_for_training
 from .utils import get_hurricane_category, safe_get
 
-# Openmeteo imports
+# Openmeteo imports including BASIN_COORDINATES
 from .openmeteo_connector import (
     fetch_open_meteo_data,
-    get_active_hurricanes_by_region
+    get_active_hurricanes_by_region,
+    BASIN_COORDINATES
 )
-
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -207,36 +207,6 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
         logger.error(traceback.format_exc())
         training_tasks[agent_id]["status"] = "failed"
         training_tasks[agent_id]["error"] = str(e)
-
-# Ocean basin identifiers mapped to coordinates
-BASIN_COORDINATES = {
-    'WP': {'name': 'Western Pacific', 'hotspots': [
-        {'lat': 15.0, 'lon': 130.0, 'name': 'Philippine Sea'},
-        {'lat': 20.0, 'lon': 135.0, 'name': 'Western Pacific'},
-        {'lat': 10.0, 'lon': 145.0, 'name': 'Micronesia Region'}
-    ]},
-    'EP': {'name': 'Eastern Pacific', 'hotspots': [
-        {'lat': 15.0, 'lon': -105.0, 'name': 'Eastern Pacific'},
-        {'lat': 12.0, 'lon': -120.0, 'name': 'Central Pacific'}
-    ]},
-    'NA': {'name': 'North Atlantic', 'hotspots': [
-        {'lat': 25.0, 'lon': -75.0, 'name': 'Western Atlantic'},
-        {'lat': 15.0, 'lon': -55.0, 'name': 'Central Atlantic'},
-        {'lat': 20.0, 'lon': -85.0, 'name': 'Caribbean Sea'}
-    ]},
-    'NI': {'name': 'North Indian', 'hotspots': [
-        {'lat': 15.0, 'lon': 85.0, 'name': 'Bay of Bengal'},
-        {'lat': 15.0, 'lon': 65.0, 'name': 'Arabian Sea'}
-    ]},
-    'SI': {'name': 'South Indian', 'hotspots': [
-        {'lat': -15.0, 'lon': 70.0, 'name': 'Madagascar Basin'},
-        {'lat': -15.0, 'lon': 90.0, 'name': 'Eastern Indian Ocean'}
-    ]},
-    'SP': {'name': 'South Pacific', 'hotspots': [
-        {'lat': -15.0, 'lon': 170.0, 'name': 'Fiji Basin'},
-        {'lat': -15.0, 'lon': 145.0, 'name': 'Coral Sea'}
-    ]}
-}
 
 @app.post("/train")
 async def train_agent(options: TrainingOptions, background_tasks: BackgroundTasks):
