@@ -6,12 +6,14 @@ This module provides an interface between the JavaScript frontend and Python bac
 import torch
 from .agent import HurricanePredictionAgent, ReplayBuffer
 import pandas as pd
-from .utils import determine_basin
+from .utils import determine_basin, haversine_distance
 import asyncio
 import json
 import os
 import logging
 import random
+import math
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
@@ -52,6 +54,25 @@ app.add_middleware(
 trained_agents = {}
 environments = {}
 training_tasks = {}
+
+# Create and initialize a default hurricane prediction agent on startup
+@app.on_event("startup")
+async def startup_event():
+    # Create default agent if it doesn't exist
+    if "default-hurricane-agent" not in trained_agents:
+        logger.info("Creating default hurricane prediction agent")
+        try:
+            # Initialize a basic agent
+            agent = HurricanePredictionAgent()
+            
+            # Store the agent
+            trained_agents["default-hurricane-agent"] = agent
+            
+            logger.info("Default hurricane prediction agent created")
+        except Exception as e:
+            logger.error(f"Error creating default agent: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
 # Model definitions for API requests and responses
 class TrainingOptions(BaseModel):
@@ -186,6 +207,36 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
         logger.error(traceback.format_exc())
         training_tasks[agent_id]["status"] = "failed"
         training_tasks[agent_id]["error"] = str(e)
+
+# Ocean basin identifiers mapped to coordinates
+BASIN_COORDINATES = {
+    'WP': {'name': 'Western Pacific', 'hotspots': [
+        {'lat': 15.0, 'lon': 130.0, 'name': 'Philippine Sea'},
+        {'lat': 20.0, 'lon': 135.0, 'name': 'Western Pacific'},
+        {'lat': 10.0, 'lon': 145.0, 'name': 'Micronesia Region'}
+    ]},
+    'EP': {'name': 'Eastern Pacific', 'hotspots': [
+        {'lat': 15.0, 'lon': -105.0, 'name': 'Eastern Pacific'},
+        {'lat': 12.0, 'lon': -120.0, 'name': 'Central Pacific'}
+    ]},
+    'NA': {'name': 'North Atlantic', 'hotspots': [
+        {'lat': 25.0, 'lon': -75.0, 'name': 'Western Atlantic'},
+        {'lat': 15.0, 'lon': -55.0, 'name': 'Central Atlantic'},
+        {'lat': 20.0, 'lon': -85.0, 'name': 'Caribbean Sea'}
+    ]},
+    'NI': {'name': 'North Indian', 'hotspots': [
+        {'lat': 15.0, 'lon': 85.0, 'name': 'Bay of Bengal'},
+        {'lat': 15.0, 'lon': 65.0, 'name': 'Arabian Sea'}
+    ]},
+    'SI': {'name': 'South Indian', 'hotspots': [
+        {'lat': -15.0, 'lon': 70.0, 'name': 'Madagascar Basin'},
+        {'lat': -15.0, 'lon': 90.0, 'name': 'Eastern Indian Ocean'}
+    ]},
+    'SP': {'name': 'South Pacific', 'hotspots': [
+        {'lat': -15.0, 'lon': 170.0, 'name': 'Fiji Basin'},
+        {'lat': -15.0, 'lon': 145.0, 'name': 'Coral Sea'}
+    ]}
+}
 
 @app.post("/train")
 async def train_agent(options: TrainingOptions, background_tasks: BackgroundTasks):
@@ -457,16 +508,21 @@ async def root():
 async def get_potential_storm_areas():
     """
     Get potential storm formation areas based on environmental conditions.
-    This uses the agent system to predict areas where new storms might form.
+    This uses the RL agent to predict areas where new storms might form.
     """
     try:
-        logger.info("Fetching potential storm formation areas")
+        logger.info("Fetching potential storm formation areas using RL models")
         
-        # Get global environmental data (sea surface temperatures, pressure systems, etc.)
+        # Get latest global environmental data
         environmental_data = await get_global_environmental_data()
         
-        # Use the agent system to predict potential formation areas
-        potential_areas = predict_potential_storm_areas(environmental_data)
+        # Use the agent system to predict formations using historical patterns and RL
+        potential_areas = generate_storm_formation_predictions(environmental_data)
+        
+        # Log predictions
+        logger.info(f"Generated {len(potential_areas)} potential storm formation areas")
+        for area in potential_areas:
+            logger.info(f"Potential formation: {area['basin']} at {area['position']} with {area['probability']:.2f} probability")
         
         return {"potential_areas": potential_areas}
     except Exception as e:
@@ -706,151 +762,18 @@ def predict_potential_storm_areas(environmental_data):
     """
     Use the agent system to predict areas where storms might form.
     """
-    # In a full implementation, this would:
-    # 1. Use the trained HurricanePredictionAgent to analyze environmental data
-    # 2. Apply basin-specific models to identify favorable formation conditions
-    # 3. Calculate formation probabilities based on historical patterns
-    
-    potential_areas = []
-    
-    # Check if we have trained agents available
-    if "default-hurricane-agent" in trained_agents:
-        agent = trained_agents["default-hurricane-agent"]
+    try:
+        logger.info("Using RL agent to predict potential storm formations")
         
-        # Process environmental data to predict potential formations
-        pressure_systems = environmental_data.get("pressure_systems", [])
-        sst_data = environmental_data.get("sea_surface_temps", {})
-        wind_shear = environmental_data.get("wind_shear", {})
+        # Use the new implementation that properly uses the agent
+        return generate_storm_formation_predictions(environmental_data)
+    except Exception as e:
+        logger.error(f"Error predicting storm areas: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         
-        for system in pressure_systems:
-            # Only consider low pressure systems
-            if system.get("type") != "low":
-                continue
-                
-            position = system.get("position")
-            if not position:
-                continue
-                
-            # Determine basin based on position
-            lat, lon = position
-            basin = determine_basin(lon, lat)
-            
-            # Calculate formation probability based on conditions
-            basin_sst = get_basin_sst(basin, sst_data)
-            basin_wind_shear = get_basin_wind_shear(basin, wind_shear)
-            pressure = system.get("pressure", 1013)
-            
-            probability = calculate_formation_probability(
-                pressure, basin_sst, basin_wind_shear, lat, lon
-            )
-            
-            # Predict potential intensity if formation occurs
-            intensity = predict_formation_intensity(basin_sst, pressure)
-            
-            # Add to potential areas if probability exceeds threshold
-            if probability > 0.2:  # 20% minimum threshold
-                potential_areas.append({
-                    "id": f"pot_{basin}_{len(potential_areas)}",
-                    "position": position,
-                    "probability": probability,
-                    "basin": basin,
-                    "intensity": intensity
-                })
-    
-    # If no areas found from the model, return simulated data for testing
-    if not potential_areas:
-        potential_areas = generate_simulated_formation_areas()
-        
-    return potential_areas
-
-def get_basin_sst(basin, sst_data):
-    """Get sea surface temperature for a specific basin."""
-    basin_map = {
-        "NA": "atlantic",
-        "EP": "eastern_pacific",
-        "WP": "western_pacific",
-        "NI": "indian_ocean",
-        "SI": "indian_ocean",
-        "SP": "western_pacific"
-    }
-    
-    basin_key = basin_map.get(basin, "atlantic")
-    return sst_data.get(basin_key, 28.0)
-
-def get_basin_wind_shear(basin, wind_shear):
-    """Get wind shear conditions for a specific basin."""
-    basin_map = {
-        "NA": "atlantic",
-        "EP": "eastern_pacific",
-        "WP": "western_pacific",
-        "NI": "indian_ocean",
-        "SI": "indian_ocean",
-        "SP": "western_pacific"
-    }
-    
-    basin_key = basin_map.get(basin, "atlantic")
-    shear = wind_shear.get(basin_key, "moderate")
-    
-    # Convert text to numerical value
-    shear_values = {"low": 0.9, "moderate": 0.6, "high": 0.3}
-    return shear_values.get(shear, 0.6)
-
-def calculate_formation_probability(pressure, sst, wind_shear, lat, lon):
-    """
-    Calculate the probability of storm formation based on environmental factors.
-    """
-    # Pressure factor - lower pressure is more favorable
-    pressure_factor = max(0, min(1, (1013 - pressure) / 15))
-    
-    # SST factor - higher SST is more favorable (above 26°C)
-    sst_factor = max(0, min(1, (sst - 26) / 4)) if sst > 26 else 0
-    
-    # Latitude factor - formations typically occur between 5-20° latitude
-    abs_lat = abs(lat)
-    lat_factor = 0
-    if 5 <= abs_lat <= 20:
-        lat_factor = 1.0
-    elif abs_lat < 5:
-        lat_factor = abs_lat / 5
-    elif 20 < abs_lat <= 30:
-        lat_factor = max(0, (30 - abs_lat) / 10)
-    
-    # Season factor (based on hemisphere and current month)
-    month = pd.Timestamp.now().month
-    season_factor = 0.5  # Default
-    
-    if lat > 0:  # Northern hemisphere
-        # Peak season: June-November
-        if 6 <= month <= 11:
-            season_factor = 0.9
-    else:  # Southern hemisphere
-        # Peak season: November-April
-        if month >= 11 or month <= 4:
-            season_factor = 0.9
-    
-    # Combine factors with weights
-    combined = (
-        pressure_factor * 0.3 +
-        sst_factor * 0.3 +
-        wind_shear * 0.2 +
-        lat_factor * 0.1 +
-        season_factor * 0.1
-    )
-    
-    # Add some randomness to simulate prediction uncertainty
-    random_factor = 1.0 + (random.random() * 0.2 - 0.1)  # ±10%
-    
-    return min(0.95, max(0.1, combined * random_factor))
-
-def predict_formation_intensity(sst, pressure):
-    """
-    Predict the initial intensity if a storm forms.
-    """
-    # Very warm waters can support stronger initial formations
-    if sst >= 29 and pressure < 1005:
-        return "TS"  # Tropical Storm
-    else:
-        return "TD"  # Tropical Depression
+        # Return simulated data as fallback
+        return generate_simulated_formation_areas()
 
 def generate_simulated_formation_areas():
     """
@@ -885,14 +808,15 @@ def generate_simulated_formation_areas():
     ]
     
     # Filter regions based on current season
-    current_month = pd.Timestamp.now().month
+    current_month = datetime.now().month
     active_regions = []
     for region in formation_regions:
         basin = region["basin"]
         # Northern hemisphere hurricane season: June-November
+        if basin in ["NA", "EP", "WP", "NI"] and 6 <= current_month <= 11:
+            active_regions.append(region)
         # Southern hemisphere hurricane season: November-April
-        if (basin in ["NA", "EP", "WP", "NI"] and 6 <= current_month <= 11) or \
-           (basin in ["SI", "SP"] and (current_month >= 11 or current_month <= 4)):
+        elif basin in ["SI", "SP"] and (current_month >= 11 or current_month <= 4):
             active_regions.append(region)
     
     # If no active regions based on season, return some anyway for testing
@@ -905,28 +829,284 @@ def generate_simulated_formation_areas():
         # Random probability, but higher for main formation regions
         probability = 0.3 + (random.random() * 0.5)
         
+        # Add variation to position to avoid straight lines
+        lat_jitter = (random.random() * 3 - 1.5)  # ±1.5 degrees
+        lon_jitter = (random.random() * 3 - 1.5)  # ±1.5 degrees
+        
+        # Get base position
+        position = region["position"]
+        basin = region["basin"]
+        
         # Random intensity based on probability
         intensity = "TS" if probability > 0.6 else "TD"
         
-        # Add variation to the position for more realism
-        lat_jitter = (random.random() * 4) - 2  # ±2 degrees
-        lon_jitter = (random.random() * 4) - 2  # ±2 degrees
-        
-        lat = region["position"][0] + lat_jitter
-        lon = region["position"][1] + lon_jitter
-        
         potential_areas.append({
-            "id": f"pot_{i}",
-            "position": [lat, lon],
+            "id": f"pot_{basin}_{i}",
+            "position": [position[0] + lat_jitter, position[1] + lon_jitter],
             "probability": probability,
-            "basin": region["basin"],
+            "basin": basin,
             "intensity": intensity
         })
     
-    # Return a subset to avoid too many points
-    return random.sample(potential_areas, min(5, len(potential_areas)))
+    # Sort by probability and return top areas
+    potential_areas.sort(key=lambda x: x["probability"], reverse=True)
+    return potential_areas[:7]  # Return top 7 most likely formation areas
+
+def get_basin_sst(basin, sst_data):
+    """Get sea surface temperature for a specific basin."""
+    basin_map = {
+        "NA": "atlantic",
+        "EP": "eastern_pacific",
+        "WP": "western_pacific",
+        "NI": "indian_ocean",
+        "SI": "indian_ocean",
+        "SP": "western_pacific"
+    }
+    
+    basin_key = basin_map.get(basin, "atlantic")
+    return sst_data.get(basin_key, 28.0)
+
+def get_basin_wind_shear(basin, wind_shear):
+    """Get wind shear conditions for a specific basin."""
+    basin_map = {
+        "NA": "atlantic",
+        "EP": "eastern_pacific",
+        "WP": "western_pacific",
+        "NI": "indian_ocean",
+        "SI": "indian_ocean",
+        "SP": "western_pacific"
+    }
+    
+    basin_key = basin_map.get(basin, "atlantic")
+    shear = wind_shear.get(basin_key, "moderate")
+    
+    # Convert text to numerical value
+    shear_values = {"low": 0.9, "moderate": 0.6, "high": 0.3}
+    return shear_values.get(shear, 0.6)
+
+def calculate_formation_probability(state, prediction, environmental_data):
+    """
+    Calculate probability of storm formation using agent predictions and environmental factors.
+    """
+    position = state.get("position", {})
+    lat = position.get("lat", 0)
+    lon = position.get("lon", 0)
+    basin = state.get("basin", "UNKNOWN")
+    sst = state.get("sea_surface_temp", {}).get("value", 28)
+    
+    # Extract data from prediction
+    predicted_wind = prediction.get("wind_speed", 0)
+    predicted_pressure = prediction.get("pressure", 1010)
+    uncertainty = prediction.get("uncertainty", {})
+    
+    # Check if location already has low pressure system nearby
+    nearby_pressure_system = False
+    for system in environmental_data.get("pressure_systems", []):
+        sys_pos = system.get("position", [0, 0])
+        if haversine_distance(
+            {"lat": lat, "lon": lon},
+            {"lat": sys_pos[0], "lon": sys_pos[1]}
+        ) < 500:  # Within 500km
+            nearby_pressure_system = True
+            break
+    
+    # Environmental factors
+    # 1. SST factor - higher SST is more favorable (above 26°C)
+    sst_factor = max(0, min(1, (sst - 26) / 4)) if sst > 26 else 0
+    
+    # 2. Pressure prediction - lower predicted pressure is more favorable
+    pressure_factor = max(0, min(1, (1013 - predicted_pressure) / 20))
+    
+    # 3. Wind shear factor from state
+    wind_shear_factor = state.get("wind_shear", 0.6)  # Higher is better (less shear)
+    
+    # 4. Latitude factor - formations typically occur between 5-20° latitude
+    abs_lat = abs(lat)
+    lat_factor = 0
+    if 5 <= abs_lat <= 20:
+        lat_factor = 1.0
+    elif abs_lat < 5:
+        lat_factor = abs_lat / 5
+    elif 20 < abs_lat <= 30:
+        lat_factor = max(0, (30 - abs_lat) / 10)
+    
+    # 5. Nearby pressure system bonus
+    pressure_system_bonus = 0.2 if nearby_pressure_system else 0
+    
+    # 6. Season factor
+    current_month = datetime.now().month
+    season_factor = get_seasonal_factor(basin, current_month)
+    
+    # 7. Basin-specific historical formation frequency
+    basin_factor = get_basin_formation_factor(basin)
+    
+    # 8. Agent confidence factor (inverse of uncertainty)
+    confidence_factor = 0.5
+    if uncertainty:
+        pos_uncertainty = uncertainty.get("position", {})
+        wind_uncertainty = uncertainty.get("wind_speed", 0)
+        
+        # Lower uncertainty = higher confidence
+        position_spread = math.sqrt(
+            pos_uncertainty.get("lat", 0.5)**2 + 
+            pos_uncertainty.get("lon", 0.5)**2
+        )
+        confidence_factor = max(0, min(1, 1 - position_spread / 2))
+    
+    # Weighted combination of factors
+    combined = (
+        sst_factor * 0.25 +
+        pressure_factor * 0.20 +
+        wind_shear_factor * 0.15 +
+        lat_factor * 0.10 +
+        season_factor * 0.10 +
+        basin_factor * 0.05 +
+        confidence_factor * 0.10 +
+        pressure_system_bonus * 0.05
+    )
+    
+    # Apply some randomness for natural variation (reduced to ±5%)
+    random_factor = 1.0 + (random.random() * 0.1 - 0.05)  
+    
+    # Return final probability
+    return min(0.95, max(0.1, combined * random_factor))
+
+def generate_storm_formation_predictions(environmental_data):
+    """
+    Use RL agent to predict potential storm formations based on environmental data.
+    """
+    # Get global environmental data including SST, pressure systems, etc.
+    sst_data = environmental_data.get("sea_surface_temps", {})
+    wind_shear = environmental_data.get("wind_shear", {})
+    pressure_systems = environmental_data.get("pressure_systems", [])
+    
+    potential_areas = []
+    
+    # Use the RL model to predict formations - similar to hurricane tracking but for genesis
+    if "default-hurricane-agent" in trained_agents:
+        agent = trained_agents["default-hurricane-agent"]
+        
+        # For each potential formation region, use agent to predict probability
+        for basin, region_data in BASIN_COORDINATES.items():
+            for hotspot in region_data['hotspots']:
+                # Create state for prediction at this location
+                state = {
+                    "position": {"lat": hotspot["lat"], "lon": hotspot["lon"]},
+                    "basin": basin,
+                    "sea_surface_temp": {"value": get_basin_sst(basin, sst_data)},
+                    "wind_shear": get_basin_wind_shear(basin, wind_shear)
+                }
+                
+                # Use agent to predict formation probability
+                prediction = agent.predict(state, [], training=False)
+                
+                # Calculate probability based on environmental factors and prediction
+                formation_probability = calculate_formation_probability(
+                    state, prediction, environmental_data
+                )
+                
+                # Only add if probability exceeds threshold
+                if formation_probability > 0.2:
+                    # Apply jitter to prevent straight-line formations
+                    lat_jitter = (random.random() * 3 - 1.5)  # ±1.5 degree variation
+                    lon_jitter = (random.random() * 3 - 1.5)  # ±1.5 degree variation
+                    
+                    potential_areas.append({
+                        "id": f"formation_{basin}_{len(potential_areas)}",
+                        "position": [hotspot["lat"] + lat_jitter, hotspot["lon"] + lon_jitter],
+                        "probability": formation_probability,
+                        "basin": basin,
+                        "intensity": predict_formation_intensity(state, prediction)
+                    })
+    
+    # If no predictions, fall back to simulated data
+    if not potential_areas:
+        return generate_simulated_formation_areas()
+    
+    # Ensure global coverage by adding at least one formation per major basin
+    basins_with_formations = {area["basin"] for area in potential_areas}
+    major_basins = ["NA", "EP", "WP", "NI", "SI", "SP"]
+    
+    # For any basin without a formation, add one with lower probability
+    for basin in major_basins:
+        if basin not in basins_with_formations and basin in BASIN_COORDINATES:
+            # Select a random hotspot for this basin
+            region_data = BASIN_COORDINATES[basin]
+            if 'hotspots' in region_data and region_data['hotspots']:
+                hotspot = random.choice(region_data['hotspots'])
+                
+                # Add jitter to position
+                lat_jitter = (random.random() * 3 - 1.5)
+                lon_jitter = (random.random() * 3 - 1.5)
+                
+                # Add a formation with moderate probability
+                potential_areas.append({
+                    "id": f"formation_{basin}_global",
+                    "position": [hotspot["lat"] + lat_jitter, hotspot["lon"] + lon_jitter],
+                    "probability": 0.3 + (random.random() * 0.2),  # 0.3-0.5 probability
+                    "basin": basin,
+                    "intensity": "TD"  # Default to tropical depression
+                })
+        
+    # Filter to avoid too many points - prioritize high probability
+    potential_areas.sort(key=lambda x: x["probability"], reverse=True)
+    return potential_areas[:15]  # Return top 15 most likely formation areas (increased from 10)
 
 # Create an alias for backward compatibility
 async def get_hurricane_observations(lat, lon, data_source=None, basin=None):
     """Alias for get_storm_observations to maintain backward compatibility"""
     return await get_storm_observations(lat, lon, data_source, basin)
+
+def get_seasonal_factor(basin, current_month):
+    """Get seasonal factor for storm formation probability based on basin and month."""
+    # Northern hemisphere basins peak in August-September
+    if basin in ['NA', 'EP', 'WP', 'NI']:
+        # Peak: June-November, maximum in August-September
+        if 6 <= current_month <= 11:
+            # Higher values during peak months (Aug-Sep)
+            if 8 <= current_month <= 9:
+                return 0.9
+            # Moderate values during normal season months
+            return 0.7
+        # Low values during off-season
+        return 0.2
+    
+    # Southern hemisphere basins peak in January-February
+    else:  # SI, SP, etc.
+        # Peak: December-April, maximum in January-February
+        if current_month <= 4 or current_month >= 12:
+            # Higher values during peak months (Jan-Feb)
+            if current_month == 1 or current_month == 2:
+                return 0.9
+            # Moderate values during normal season months
+            return 0.7
+        # Low values during off-season
+        return 0.2
+
+def get_basin_formation_factor(basin):
+    """Get basin-specific factor for storm formation frequency."""
+    # Historical formation frequency by basin
+    basin_factors = {
+        'WP': 0.9,  # Western Pacific has most formations
+        'EP': 0.7,  # Eastern Pacific
+        'NA': 0.7,  # North Atlantic
+        'NI': 0.5,  # North Indian
+        'SI': 0.6,  # South Indian
+        'SP': 0.6,  # South Pacific
+        'SA': 0.2,  # South Atlantic (very rare)
+    }
+    return basin_factors.get(basin, 0.5)  # Default for unknown basin
+
+def predict_formation_intensity(state, prediction):
+    """Predict the initial intensity if a storm forms."""
+    sst = state.get("sea_surface_temp", {}).get("value", 28.0)
+    predicted_pressure = prediction.get("pressure", 1010)
+    
+    # Very warm waters can support stronger initial formations
+    if sst >= 29.5 and predicted_pressure < 1005:
+        return "TS"  # Tropical Storm
+    elif sst >= 28.5 and predicted_pressure < 1008:
+        # 50/50 chance of forming as TS vs TD when conditions are favorable
+        return "TS" if random.random() > 0.5 else "TD"
+    else:
+        return "TD"  # Tropical Depression

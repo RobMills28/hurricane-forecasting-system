@@ -286,10 +286,10 @@ export async function getRegionalForecast(latitude, longitude, region = 'GLOBAL'
 }
 
 /**
- * Process Open-Meteo data into a standardized format for your application
+ * Process Open-Meteo data into a standardised format
  * @param {Object} data - Raw Open-Meteo data
  * @param {string} region - Region identifier
- * @returns {Object} Processed data in your app's format
+ * @returns {Object} Processed data in app's format
  */
 function processOpenMeteoData(data, region) {
   try {
@@ -301,7 +301,7 @@ function processOpenMeteoData(data, region) {
       throw new Error('Essential forecast data missing from response');
     }
     
-    // Convert to your application's format
+    // Convert to application's format
     const processed = {
       source: `Open-Meteo-${region}`,
       coordinates: [data.longitude, data.latitude],
@@ -418,7 +418,7 @@ function detectStorms(hourly, daily, region) {
   
   // Check for continuous periods of severe weather with strong winds
   for (let i = 0; i < hourly.time.length; i++) {
-    // Skip if we don't have all the data we need
+    // Skip if missing all the data we need
     if (!hourly.weather_code?.[i] || 
         !hourly.wind_speed_10m?.[i] || 
         !hourly.pressure_msl?.[i]) {
@@ -431,8 +431,8 @@ function detectStorms(hourly, daily, region) {
     const time = hourly.time[i];
     const temperature = hourly.temperature_2m?.[i];
     
-    // CRITICAL: Add randomization to create a more diverse category distribution
-    // This will ensure we get storms of all categories, not just Category 1
+    // CRITICAL: Add randomisation to create a more diverse category distribution
+    // This hopefully will ensure that the system isn't only returning Category 1 storms
     const randomIntensityFactor = () => {
       // Create an array with different weights to ensure category diversity
       // More weight on higher values creates more intense storms
