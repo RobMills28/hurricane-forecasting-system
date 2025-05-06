@@ -54,18 +54,18 @@ def generate_comparison_charts(single_results: Dict, multi_results: Dict):
     # 1. Position Error by Forecast Time comparison
     plt.figure(figsize=(10, 6))
     times = [24, 48, 72, 96, 120]
-    
+
     single_errors = [single_results["summary"]["overall"]["by_time"][t]["avg_position_error"] 
                     for t in times]
     multi_errors = [multi_results["summary"]["overall"]["by_time"][t]["avg_position_error"] 
-                   for t in times]
-    
+                for t in times]
+
     plt.plot(times, single_errors, 'o-', linewidth=2, label='Single Agent', color='blue')
     plt.plot(times, multi_errors, 'o-', linewidth=2, label='Multi-Agent Ensemble', color='green')
     plt.xlabel('Forecast Time (hours)')
     plt.ylabel('Average Position Error (km)')
     plt.title('Position Error Comparison by Forecast Time')
-    plt.grid(True)
+    plt.grid(False)
     plt.legend()
     plt.savefig('comparison_results/position_error_comparison.png')
     
@@ -82,7 +82,7 @@ def generate_comparison_charts(single_results: Dict, multi_results: Dict):
     plt.xlabel('Forecast Time (hours)')
     plt.ylabel('Average Wind Speed Error (mph)')
     plt.title('Intensity Error Comparison by Forecast Time')
-    plt.grid(True)
+    plt.grid(False)
     plt.legend()
     plt.savefig('comparison_results/intensity_error_comparison.png')
     
@@ -115,7 +115,7 @@ def generate_comparison_charts(single_results: Dict, multi_results: Dict):
     plt.ylabel('Average Position Error (km)')
     plt.title('Position Error Comparison by Ocean Basin')
     plt.xticks(x, basin_labels)
-    plt.grid(True, axis='y')
+    plt.grid(False)
     plt.legend()
     plt.tight_layout()
     plt.savefig('comparison_results/basin_error_comparison.png')
@@ -153,7 +153,7 @@ def generate_comparison_charts(single_results: Dict, multi_results: Dict):
     plt.ylabel('Average Position Error (km)')
     plt.title('Position Error Comparison by Hurricane')
     plt.xticks(x, hurricane_names, rotation=45, ha='right')
-    plt.grid(True, axis='y')
+    plt.grid(False)
     plt.legend()
     plt.tight_layout()
     plt.savefig('comparison_results/hurricane_error_comparison.png')
@@ -182,7 +182,7 @@ def generate_comparison_charts(single_results: Dict, multi_results: Dict):
     plt.ylabel('Error')
     plt.title('Overall Performance Comparison')
     plt.xticks(x, metrics)
-    plt.grid(True, axis='y')
+    plt.grid(False)
     plt.legend()
     plt.tight_layout()
     plt.savefig('comparison_results/overall_comparison.png')
