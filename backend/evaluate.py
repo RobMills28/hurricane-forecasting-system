@@ -14,7 +14,7 @@ from typing import Dict, List, Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the agent and utility functions
-from hurricane_agents.agent import HurricanePredictionAgent
+from hurricane_agents.single_agent import HurricanePredictionAgent
 from hurricane_agents.utils import haversine_distance, get_hurricane_category
 
 # Test hurricanes and other storm types
