@@ -47,22 +47,34 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class QNetwork(nn.Module):
-    """Neural network for Q-function approximation."""
+    """Enhanced neural network for Q-function approximation."""
     
     def __init__(self, state_dim, action_dim):
         """Initialize network with given dimensions."""
         super(QNetwork, self).__init__()
         
-        # Define network architecture
+        # Deeper network architecture with dropout for regularization
         self.fc1 = nn.Linear(state_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, action_dim)
+        self.dropout1 = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(128, 256)  # Wider middle layer
+        self.dropout2 = nn.Dropout(0.2)
+        self.fc3 = nn.Linear(256, 128)  # Additional layer
+        self.fc4 = nn.Linear(128, action_dim)
+        
+        # Initialize weights with Xavier initialization
+        nn.init.xavier_uniform_(self.fc1.weight)
+        nn.init.xavier_uniform_(self.fc2.weight)
+        nn.init.xavier_uniform_(self.fc3.weight)
+        nn.init.xavier_uniform_(self.fc4.weight)
     
     def forward(self, x):
         """Forward pass through network."""
         x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
         x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        x = self.dropout2(x)
+        x = F.relu(self.fc3(x))
+        return self.fc4(x)
 
 class HurricanePredictionAgent:
     """
@@ -132,16 +144,58 @@ class HurricanePredictionAgent:
         
         # Environmental factor weights
         self.environmental_factors = {
-            "sea_surface_temp": 0.3,         # Influence of SST on intensification
-            "latitudinal_effect": 0.2,       # Higher latitudes encourage weakening/recurvature
-            "seasonal_effect": 0.1           # Seasonal patterns
+            "sea_surface_temp": 0.6,         # Increased influence of SST on intensification
+            "latitudinal_effect": 0.35,      # Increased effect of latitude on track
+            "seasonal_effect": 0.15,         # Slightly increased seasonal influence
+            "basin_climatology": 0.25        # New factor for basin-specific climatology
+            
         }
+        
+        # Initialize basin-specific movement patterns
+        self._initialize_basin_patterns()
         
         # Performance tracking
         self.training_performance = []
         
         # Ensemble models
         self.ensemble_members = self._initialize_ensemble()
+        
+    def _initialize_basin_patterns(self):
+        """Initialize basin-specific movement patterns."""
+        self.basin_patterns = {
+            "NA": {  # North Atlantic
+                "early_lat_change": 0.15,  # Movement northward early
+                "early_lon_change": -0.45,  # Strong westward component early
+                "recurve_latitude": 25.0,   # Typical recurvature latitude
+                "recurve_strength": 0.35,   # How sharply storms recurve
+                "dissipation_latitude": 40.0,  # Where storms typically dissipate
+                "intensity_change_rate": 0.08   # Intensification rate
+            },
+            "EP": {  # Eastern Pacific
+                "early_lat_change": 0.1,
+                "early_lon_change": -0.5,
+                "recurve_latitude": 20.0,
+                "recurve_strength": 0.25,
+                "dissipation_latitude": 35.0,
+                "intensity_change_rate": 0.06
+            },
+            "WP": {  # Western Pacific
+                "early_lat_change": 0.1,
+                "early_lon_change": -0.3,
+                "recurve_latitude": 22.0,
+                "recurve_strength": 0.4,
+                "dissipation_latitude": 45.0,
+                "intensity_change_rate": 0.1  # Greater intensification in WP
+            },
+            "DEFAULT": {
+                "early_lat_change": 0.1,
+                "early_lon_change": -0.4,
+                "recurve_latitude": 25.0,
+                "recurve_strength": 0.3,
+                "dissipation_latitude": 40.0,
+                "intensity_change_rate": 0.08
+            }
+        }
     
     def _create_basin_model(self):
         """Create a basin-specific model."""
@@ -329,7 +383,25 @@ class HurricanePredictionAgent:
         lon_change = lon_changes[lon_action]
         intensity_change = intensity_changes[intensity_action]
         
-        # Apply changes
+        # Get basin patterns
+        basin = state.get("basin", "DEFAULT")
+        patterns = self.basin_patterns.get(basin, self.basin_patterns["DEFAULT"])
+
+        # Modify changes based on basin patterns
+        if current_lat < patterns["recurve_latitude"]:
+            # Early track behavior (before recurvature)
+            lat_change = lat_change * 0.7 + patterns["early_lat_change"] * 0.3
+            lon_change = lon_change * 0.7 + patterns["early_lon_change"] * 0.3
+        else:
+            # Apply recurvature effect
+            recurve_effect = (current_lat - patterns["recurve_latitude"]) * patterns["recurve_strength"] / 10.0
+            lat_change = lat_change + recurve_effect * 0.4
+            lon_change = lon_change + recurve_effect * 0.6  # Stronger eastward component after recurvature
+
+        # Modify intensity change based on basin patterns
+        intensity_change = intensity_change * (1 + patterns["intensity_change_rate"])
+
+        # Apply modified changes
         new_lat = current_lat + lat_change
         new_lon = current_lon + lon_change
         new_wind = max(0, current_wind + intensity_change)
@@ -553,7 +625,7 @@ class HurricanePredictionAgent:
     
     def combine_ensemble_predictions(self, predictions: List[Dict], state: Dict) -> Dict:
         """
-        Combine predictions from ensemble members.
+        Combine predictions from ensemble members with improved weighting and outlier handling.
         
         Args:
             predictions: List of individual predictions
@@ -562,38 +634,51 @@ class HurricanePredictionAgent:
         Returns:
             Combined prediction with uncertainty estimates
         """
-        # Calculate weighted average of predictions
-        # More weight is given to the main model
+        # Extract main model prediction (last element) and ensemble predictions
+        main_prediction = predictions[-1] if predictions else {}
+        ensemble_predictions = predictions[:-1] if len(predictions) > 1 else []
         
-        # Simple arithmetic mean for position
-        total_lat = sum(pred.get("position", {}).get("lat", 0) for pred in predictions)
-        total_lon = sum(pred.get("position", {}).get("lon", 0) for pred in predictions)
-        avg_lat = total_lat / len(predictions)
-        avg_lon = total_lon / len(predictions)
+        if not ensemble_predictions:
+            return main_prediction
         
-        # Simple arithmetic mean for intensity
-        total_wind = sum(pred.get("wind_speed", 0) for pred in predictions)
-        total_pressure = sum(pred.get("pressure", 0) for pred in predictions)
-        avg_wind = total_wind / len(predictions)
-        avg_pressure = total_pressure / len(predictions)
+        # Extract position values
+        positions_lat = [pred.get("position", {}).get("lat", 0) for pred in ensemble_predictions]
+        positions_lon = [pred.get("position", {}).get("lon", 0) for pred in ensemble_predictions]
+        wind_speeds = [pred.get("wind_speed", 0) for pred in ensemble_predictions]
+        pressures = [pred.get("pressure", 0) for pred in ensemble_predictions]
+        
+        # Get main model values
+        main_lat = main_prediction.get("position", {}).get("lat", 0)
+        main_lon = main_prediction.get("position", {}).get("lon", 0)
+        main_wind = main_prediction.get("wind_speed", 0)
+        main_pressure = main_prediction.get("pressure", 0)
+        
+        # Add main model to ensemble values with higher weight
+        main_weight = 2.0  # Main model has 2x the weight of ensemble members
+        
+        # Add weighted main model values
+        weighted_positions_lat = positions_lat + [main_lat] * int(main_weight)
+        weighted_positions_lon = positions_lon + [main_lon] * int(main_weight)
+        weighted_wind_speeds = wind_speeds + [main_wind] * int(main_weight)
+        weighted_pressures = pressures + [main_pressure] * int(main_weight)
+        
+        # Remove outliers (values beyond 2 standard deviations)
+        filtered_lat = self._filter_outliers(weighted_positions_lat)
+        filtered_lon = self._filter_outliers(weighted_positions_lon)
+        filtered_wind = self._filter_outliers(weighted_wind_speeds)
+        filtered_pressure = self._filter_outliers(weighted_pressures)
+        
+        # Calculate means with outliers removed
+        avg_lat = sum(filtered_lat) / len(filtered_lat) if filtered_lat else main_lat
+        avg_lon = sum(filtered_lon) / len(filtered_lon) if filtered_lon else main_lon
+        avg_wind = sum(filtered_wind) / len(filtered_wind) if filtered_wind else main_wind
+        avg_pressure = sum(filtered_pressure) / len(filtered_pressure) if filtered_pressure else main_pressure
         
         # Calculate standard deviations for uncertainty estimation
-        lat_std_dev = self._calculate_std_dev(
-            [pred.get("position", {}).get("lat", 0) for pred in predictions], 
-            avg_lat
-        )
-        lon_std_dev = self._calculate_std_dev(
-            [pred.get("position", {}).get("lon", 0) for pred in predictions], 
-            avg_lon
-        )
-        wind_std_dev = self._calculate_std_dev(
-            [pred.get("wind_speed", 0) for pred in predictions], 
-            avg_wind
-        )
-        pressure_std_dev = self._calculate_std_dev(
-            [pred.get("pressure", 0) for pred in predictions], 
-            avg_pressure
-        )
+        lat_std_dev = self._calculate_std_dev(filtered_lat, avg_lat)
+        lon_std_dev = self._calculate_std_dev(filtered_lon, avg_lon)
+        wind_std_dev = self._calculate_std_dev(filtered_wind, avg_wind)
+        pressure_std_dev = self._calculate_std_dev(filtered_pressure, avg_pressure)
         
         return {
             "position": {"lat": avg_lat, "lon": avg_lon},
@@ -605,6 +690,17 @@ class HurricanePredictionAgent:
                 "pressure": pressure_std_dev
             }
         }
+
+    def _filter_outliers(self, values: List[float]) -> List[float]:
+        """Remove outliers from a list of values (beyond 2 standard deviations)."""
+        if not values or len(values) < 3:
+            return values
+            
+        mean = sum(values) / len(values)
+        std_dev = math.sqrt(sum((x - mean) ** 2 for x in values) / len(values))
+        threshold = 2 * std_dev
+        
+        return [x for x in values if abs(x - mean) <= threshold]
     
     def _calculate_std_dev(self, values: List[float], mean: float) -> float:
         """
@@ -634,15 +730,20 @@ class HurricanePredictionAgent:
         Returns:
             Effect multiplier
         """
-        # Hurricanes typically intensify over waters warmer than 26°C
-        # and intensify rapidly over waters warmer than 28°C
+        # Enhanced SST thresholds based on research
+        if sst < 25:
+            return -0.15  # Stronger weakening effect
         if sst < 26:
-            return -0.05  # Slight weakening effect
+            return -0.08  # Moderate weakening
+        if sst < 27:
+            return 0.0    # Neutral effect
         if sst < 28:
-            return 0.02   # Slight intensification
+            return 0.05   # Slight intensification 
+        if sst < 29:
+            return 0.12   # Moderate intensification
         if sst < 30:
-            return 0.05   # Moderate intensification
-        return 0.08       # Strong intensification
+            return 0.20   # Strong intensification
+        return 0.30       # Very strong intensification (rapid intensification potential)
     
     def calculate_latitude_effect(self, latitude: float, basin: str) -> float:
         """

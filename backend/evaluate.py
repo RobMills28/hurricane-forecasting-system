@@ -1,10 +1,5 @@
 """
-evaluate.py - Evaluation script for hurricane prediction agent
-
-Usage: python evaluate.py
-
-This script tests the hurricane prediction agent against historical hurricane data
-and reports performance metrics for inclusion in academic reports.
+evaluate.py - Evaluation script for hurricane and storm prediction agent
 """
 
 import os
@@ -13,28 +8,22 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-# Add the parent directory to the path to import the hurricane_agents module
+# Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the agent and utility functions
 from hurricane_agents.agent import HurricanePredictionAgent
 from hurricane_agents.utils import haversine_distance, get_hurricane_category
 
-# Test hurricanes from 2020-2024 (not in training data)
-TEST_HURRICANES = [
+# Test hurricanes and other storm types
+TEST_STORMS = [
+    # Original hurricanes
     {
-        "id": "test_ida_2021",
-        "name": "Hurricane Ida",
-        "year": 2021,
-        "basin": "NA",  # North Atlantic
-        "initial_position": {"lat": 25.1, "lon": -80.5},
-        "initial_wind_speed": 75,
-        "initial_pressure": 985,
+        "id": "test_ida_2021", "name": "Hurricane Ida", "year": 2021, "basin": "NA", "type": "Hurricane",
+        "initial_position": {"lat": 25.1, "lon": -80.5}, "initial_wind_speed": 75, "initial_pressure": 985,
         "track": [
-            # Format: time, lat, lon, wind_speed, pressure
             {"time": 0, "position": {"lat": 25.1, "lon": -80.5}, "wind_speed": 75, "pressure": 985},
             {"time": 24, "position": {"lat": 26.8, "lon": -85.3}, "wind_speed": 100, "pressure": 968},
             {"time": 48, "position": {"lat": 28.2, "lon": -89.6}, "wind_speed": 140, "pressure": 935},
@@ -44,13 +33,8 @@ TEST_HURRICANES = [
         ]
     },
     {
-        "id": "test_fiona_2022",
-        "name": "Hurricane Fiona",
-        "year": 2022,
-        "basin": "NA",
-        "initial_position": {"lat": 16.8, "lon": -62.1},
-        "initial_wind_speed": 85,
-        "initial_pressure": 980,
+        "id": "test_fiona_2022", "name": "Hurricane Fiona", "year": 2022, "basin": "NA", "type": "Hurricane",
+        "initial_position": {"lat": 16.8, "lon": -62.1}, "initial_wind_speed": 85, "initial_pressure": 980,
         "track": [
             {"time": 0, "position": {"lat": 16.8, "lon": -62.1}, "wind_speed": 85, "pressure": 980},
             {"time": 24, "position": {"lat": 18.2, "lon": -65.8}, "wind_speed": 95, "pressure": 975},
@@ -61,30 +45,8 @@ TEST_HURRICANES = [
         ]
     },
     {
-        "id": "test_dorian_2019",
-        "name": "Hurricane Dorian",
-        "year": 2019,
-        "basin": "NA",
-        "initial_position": {"lat": 18.3, "lon": -65.0},
-        "initial_wind_speed": 80,
-        "initial_pressure": 983,
-        "track": [
-            {"time": 0, "position": {"lat": 18.3, "lon": -65.0}, "wind_speed": 80, "pressure": 983},
-            {"time": 24, "position": {"lat": 20.1, "lon": -67.8}, "wind_speed": 105, "pressure": 972},
-            {"time": 48, "position": {"lat": 22.5, "lon": -70.3}, "wind_speed": 130, "pressure": 950},
-            {"time": 72, "position": {"lat": 25.4, "lon": -73.1}, "wind_speed": 150, "pressure": 930},
-            {"time": 96, "position": {"lat": 26.8, "lon": -76.7}, "wind_speed": 180, "pressure": 910},
-            {"time": 120, "position": {"lat": 27.1, "lon": -78.4}, "wind_speed": 175, "pressure": 915}
-        ]
-    },
-    {
-        "id": "test_hagibis_2019",
-        "name": "Typhoon Hagibis",
-        "year": 2019,
-        "basin": "WP",  # Western Pacific
-        "initial_position": {"lat": 15.3, "lon": 153.2},
-        "initial_wind_speed": 90,
-        "initial_pressure": 975,
+        "id": "test_hagibis_2019", "name": "Typhoon Hagibis", "year": 2019, "basin": "WP", "type": "Typhoon",
+        "initial_position": {"lat": 15.3, "lon": 153.2}, "initial_wind_speed": 90, "initial_pressure": 975,
         "track": [
             {"time": 0, "position": {"lat": 15.3, "lon": 153.2}, "wind_speed": 90, "pressure": 975},
             {"time": 24, "position": {"lat": 16.7, "lon": 150.1}, "wind_speed": 125, "pressure": 950},
@@ -94,90 +56,71 @@ TEST_HURRICANES = [
             {"time": 120, "position": {"lat": 36.2, "lon": 142.1}, "wind_speed": 85, "pressure": 975}
         ]
     },
+    # Additional storm types
     {
-        "id": "test_elsa_2021",
-        "name": "Hurricane Elsa",
-        "year": 2021,
-        "basin": "NA",
-        "initial_position": {"lat": 11.2, "lon": -52.8},
-        "initial_wind_speed": 60,
-        "initial_pressure": 1000,
+        "id": "test_winter_storm_2023", "name": "Winter Storm Elliott", "year": 2023, "basin": "NA", "type": "Winter Storm",
+        "initial_position": {"lat": 42.5, "lon": -95.3}, "initial_wind_speed": 45, "initial_pressure": 992,
         "track": [
-            {"time": 0, "position": {"lat": 11.2, "lon": -52.8}, "wind_speed": 60, "pressure": 1000},
-            {"time": 24, "position": {"lat": 13.1, "lon": -57.6}, "wind_speed": 75, "pressure": 995},
-            {"time": 48, "position": {"lat": 15.3, "lon": -63.7}, "wind_speed": 80, "pressure": 991},
-            {"time": 72, "position": {"lat": 18.6, "lon": -70.5}, "wind_speed": 65, "pressure": 1002},
-            {"time": 96, "position": {"lat": 22.9, "lon": -79.8}, "wind_speed": 60, "pressure": 1005},
-            {"time": 120, "position": {"lat": 28.7, "lon": -82.3}, "wind_speed": 55, "pressure": 1007}
+            {"time": 0, "position": {"lat": 42.5, "lon": -95.3}, "wind_speed": 45, "pressure": 992},
+            {"time": 24, "position": {"lat": 43.8, "lon": -89.2}, "wind_speed": 50, "pressure": 988},
+            {"time": 48, "position": {"lat": 45.1, "lon": -84.7}, "wind_speed": 55, "pressure": 982},
+            {"time": 72, "position": {"lat": 46.3, "lon": -78.5}, "wind_speed": 48, "pressure": 985},
+            {"time": 96, "position": {"lat": 47.2, "lon": -72.1}, "wind_speed": 42, "pressure": 990},
+            {"time": 120, "position": {"lat": 48.7, "lon": -65.3}, "wind_speed": 35, "pressure": 995}
+        ]
+    },
+    {
+        "id": "test_thunderstorm_2023", "name": "Severe Thunderstorm Texas", "year": 2023, "basin": "NA", "type": "Severe Thunderstorm",
+        "initial_position": {"lat": 32.1, "lon": -96.8}, "initial_wind_speed": 65, "initial_pressure": 998,
+        "track": [
+            {"time": 0, "position": {"lat": 32.1, "lon": -96.8}, "wind_speed": 65, "pressure": 998},
+            {"time": 24, "position": {"lat": 33.2, "lon": -94.3}, "wind_speed": 70, "pressure": 995},
+            {"time": 48, "position": {"lat": 34.5, "lon": -91.8}, "wind_speed": 60, "pressure": 997},
+            {"time": 72, "position": {"lat": 35.7, "lon": -89.2}, "wind_speed": 50, "pressure": 1000},
+            {"time": 96, "position": {"lat": 36.9, "lon": -87.1}, "wind_speed": 35, "pressure": 1004},
+            {"time": 120, "position": {"lat": 38.2, "lon": -84.5}, "wind_speed": 25, "pressure": 1008}
         ]
     }
 ]
 
 def evaluate_agent(agent: HurricanePredictionAgent) -> Dict[str, Any]:
-    """
-    Evaluate the hurricane prediction agent against test hurricanes.
-    
-    Args:
-        agent: The hurricane prediction agent
-        
-    Returns:
-        Dictionary with evaluation metrics
-    """
+    """Evaluate the agent against test storms."""
     results = {
         "overall": {
-            "position_errors": [],
-            "wind_speed_errors": [],
-            "pressure_errors": [],
+            "position_errors": [], "wind_speed_errors": [], "pressure_errors": [],
             "position_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
             "wind_speed_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
             "pressure_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []}
         },
-        "by_hurricane": {},
-        "by_basin": {}
+        "by_storm": {}, "by_basin": {}, "by_type": {}
     }
     
-    # Process each test hurricane
-    for hurricane in TEST_HURRICANES:
-        hurricane_id = hurricane["id"]
-        basin = hurricane["basin"]
+    # Process each test storm
+    for storm in TEST_STORMS:
+        storm_id, basin, storm_type = storm["id"], storm["basin"], storm["type"]
         
-        # Initialize results for this hurricane and basin if needed
-        if hurricane_id not in results["by_hurricane"]:
-            results["by_hurricane"][hurricane_id] = {
-                "position_errors": [],
-                "wind_speed_errors": [],
-                "pressure_errors": [],
-                "position_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
-                "wind_speed_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
-                "pressure_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []}
-            }
+        # Initialize results containers if needed
+        for container_type, key in [("by_storm", storm_id), ("by_basin", basin), ("by_type", storm_type)]:
+            if key not in results[container_type]:
+                results[container_type][key] = {
+                    "position_errors": [], "wind_speed_errors": [], "pressure_errors": [],
+                    "position_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
+                    "wind_speed_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []}
+                }
         
-        if basin not in results["by_basin"]:
-            results["by_basin"][basin] = {
-                "position_errors": [],
-                "wind_speed_errors": [],
-                "pressure_errors": [],
-                "position_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
-                "wind_speed_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []},
-                "pressure_errors_by_time": {24: [], 48: [], 72: [], 96: [], 120: []}
-            }
-        
-        # Store initial state and history
+        # Set up initial state and history
         initial_state = {
-            "position": hurricane["initial_position"],
-            "wind_speed": hurricane["initial_wind_speed"],
-            "pressure": hurricane["initial_pressure"],
-            "basin": hurricane["basin"],
-            "sea_surface_temp": {"value": 28.5} # Default value
+            "position": storm["initial_position"],
+            "wind_speed": storm["initial_wind_speed"],
+            "pressure": storm["initial_pressure"],
+            "basin": storm["basin"],
+            "sea_surface_temp": {"value": 28.5}
         }
-        
         history = []
         
         # Generate predictions and compare with actual track
-        for track_point in hurricane["track"][1:]:  # Skip the first point (initial state)
+        for track_point in storm["track"][1:]:
             time_hours = track_point["time"]
-            
-            # Make prediction
             prediction = agent.predict(initial_state, history, training=False)
             
             # Calculate errors
@@ -185,39 +128,22 @@ def evaluate_agent(agent: HurricanePredictionAgent) -> Dict[str, Any]:
                 prediction.get("position", {"lat": 0, "lon": 0}),
                 track_point["position"]
             )
-            
             wind_speed_error = abs(prediction.get("wind_speed", 0) - track_point["wind_speed"])
             pressure_error = abs(prediction.get("pressure", 1010) - track_point["pressure"])
             
             # Store errors in results
-            results["overall"]["position_errors"].append(position_error)
-            results["overall"]["wind_speed_errors"].append(wind_speed_error)
-            results["overall"]["pressure_errors"].append(pressure_error)
-            
-            results["by_hurricane"][hurricane_id]["position_errors"].append(position_error)
-            results["by_hurricane"][hurricane_id]["wind_speed_errors"].append(wind_speed_error)
-            results["by_hurricane"][hurricane_id]["pressure_errors"].append(pressure_error)
-            
-            results["by_basin"][basin]["position_errors"].append(position_error)
-            results["by_basin"][basin]["wind_speed_errors"].append(wind_speed_error)
-            results["by_basin"][basin]["pressure_errors"].append(pressure_error)
-            
-            # Store by forecast time
-            if time_hours in results["overall"]["position_errors_by_time"]:
-                results["overall"]["position_errors_by_time"][time_hours].append(position_error)
-                results["overall"]["wind_speed_errors_by_time"][time_hours].append(wind_speed_error)
-                results["overall"]["pressure_errors_by_time"][time_hours].append(pressure_error)
+            for container_type, key in [("overall", None), ("by_storm", storm_id), 
+                                       ("by_basin", basin), ("by_type", storm_type)]:
+                container = results[container_type] if key is None else results[container_type][key]
+                container["position_errors"].append(position_error)
+                container["wind_speed_errors"].append(wind_speed_error)
+                container["pressure_errors"].append(pressure_error)
                 
-                results["by_hurricane"][hurricane_id]["position_errors_by_time"][time_hours].append(position_error)
-                results["by_hurricane"][hurricane_id]["wind_speed_errors_by_time"][time_hours].append(wind_speed_error)
-                results["by_hurricane"][hurricane_id]["pressure_errors_by_time"][time_hours].append(pressure_error)
-                
-                results["by_basin"][basin]["position_errors_by_time"][time_hours].append(position_error)
-                results["by_basin"][basin]["wind_speed_errors_by_time"][time_hours].append(wind_speed_error)
-                results["by_basin"][basin]["pressure_errors_by_time"][time_hours].append(pressure_error)
+                if time_hours in container["position_errors_by_time"]:
+                    container["position_errors_by_time"][time_hours].append(position_error)
+                    container["wind_speed_errors_by_time"][time_hours].append(wind_speed_error)
     
     # Calculate summary statistics
-    # Overall
     results["summary"] = {
         "overall": {
             "avg_position_error": np.mean(results["overall"]["position_errors"]),
@@ -225,76 +151,33 @@ def evaluate_agent(agent: HurricanePredictionAgent) -> Dict[str, Any]:
             "avg_pressure_error": np.mean(results["overall"]["pressure_errors"]),
             "by_time": {}
         },
-        "by_hurricane": {},
-        "by_basin": {}
+        "by_storm": {}, "by_basin": {}, "by_type": {}
     }
     
     # By time
     for time_hours in [24, 48, 72, 96, 120]:
-        position_errors = results["overall"]["position_errors_by_time"][time_hours]
-        wind_speed_errors = results["overall"]["wind_speed_errors_by_time"][time_hours]
-        pressure_errors = results["overall"]["pressure_errors_by_time"][time_hours]
-        
-        if position_errors:
+        if results["overall"]["position_errors_by_time"][time_hours]:
             results["summary"]["overall"]["by_time"][time_hours] = {
-                "avg_position_error": np.mean(position_errors),
-                "avg_wind_speed_error": np.mean(wind_speed_errors),
-                "avg_pressure_error": np.mean(pressure_errors)
+                "avg_position_error": np.mean(results["overall"]["position_errors_by_time"][time_hours]),
+                "avg_wind_speed_error": np.mean(results["overall"]["wind_speed_errors_by_time"][time_hours])
             }
     
-    # By hurricane
-    for hurricane_id in results["by_hurricane"]:
-        results["summary"]["by_hurricane"][hurricane_id] = {
-            "avg_position_error": np.mean(results["by_hurricane"][hurricane_id]["position_errors"]),
-            "avg_wind_speed_error": np.mean(results["by_hurricane"][hurricane_id]["wind_speed_errors"]),
-            "avg_pressure_error": np.mean(results["by_hurricane"][hurricane_id]["pressure_errors"]),
-            "by_time": {}
-        }
-        
-        for time_hours in [24, 48, 72, 96, 120]:
-            position_errors = results["by_hurricane"][hurricane_id]["position_errors_by_time"][time_hours]
-            wind_speed_errors = results["by_hurricane"][hurricane_id]["wind_speed_errors_by_time"][time_hours]
-            pressure_errors = results["by_hurricane"][hurricane_id]["pressure_errors_by_time"][time_hours]
-            
-            if position_errors:
-                results["summary"]["by_hurricane"][hurricane_id]["by_time"][time_hours] = {
-                    "avg_position_error": np.mean(position_errors),
-                    "avg_wind_speed_error": np.mean(wind_speed_errors),
-                    "avg_pressure_error": np.mean(pressure_errors)
-                }
-    
-    # By basin
-    for basin in results["by_basin"]:
-        results["summary"]["by_basin"][basin] = {
-            "avg_position_error": np.mean(results["by_basin"][basin]["position_errors"]),
-            "avg_wind_speed_error": np.mean(results["by_basin"][basin]["wind_speed_errors"]),
-            "avg_pressure_error": np.mean(results["by_basin"][basin]["pressure_errors"]),
-            "by_time": {}
-        }
-        
-        for time_hours in [24, 48, 72, 96, 120]:
-            position_errors = results["by_basin"][basin]["position_errors_by_time"][time_hours]
-            wind_speed_errors = results["by_basin"][basin]["wind_speed_errors_by_time"][time_hours]
-            pressure_errors = results["by_basin"][basin]["pressure_errors_by_time"][time_hours]
-            
-            if position_errors:
-                results["summary"]["by_basin"][basin]["by_time"][time_hours] = {
-                    "avg_position_error": np.mean(position_errors),
-                    "avg_wind_speed_error": np.mean(wind_speed_errors),
-                    "avg_pressure_error": np.mean(pressure_errors)
-                }
+    # By storm, basin, and type
+    for container_type in ["by_storm", "by_basin", "by_type"]:
+        for key in results[container_type]:
+            if not results[container_type][key]["position_errors"]:
+                continue
+                
+            results["summary"][container_type][key] = {
+                "avg_position_error": np.mean(results[container_type][key]["position_errors"]),
+                "avg_wind_speed_error": np.mean(results[container_type][key]["wind_speed_errors"]),
+                "avg_pressure_error": np.mean(results[container_type][key]["pressure_errors"])
+            }
     
     return results
 
 def plot_results(results: Dict[str, Any], output_dir: str = "evaluation_results"):
-    """
-    Plot evaluation results.
-    
-    Args:
-        results: Dictionary with evaluation metrics
-        output_dir: Directory to save plots
-    """
-    # Create output directory if it doesn't exist
+    """Plot evaluation results."""
     os.makedirs(output_dir, exist_ok=True)
     
     # Plot 1: Position error by forecast time
@@ -304,7 +187,7 @@ def plot_results(results: Dict[str, Any], output_dir: str = "evaluation_results"
     plt.plot(times, avg_errors, 'o-', linewidth=2, markersize=8)
     plt.xlabel('Forecast Time (hours)')
     plt.ylabel('Average Position Error (km)')
-    plt.title('Hurricane Position Error by Forecast Time')
+    plt.title('Storm Position Error by Forecast Time')
     plt.grid(True)
     plt.savefig(os.path.join(output_dir, 'position_error_by_time.png'))
     
@@ -314,120 +197,40 @@ def plot_results(results: Dict[str, Any], output_dir: str = "evaluation_results"
     plt.plot(times, avg_errors, 'o-', linewidth=2, markersize=8, color='orange')
     plt.xlabel('Forecast Time (hours)')
     plt.ylabel('Average Wind Speed Error (mph)')
-    plt.title('Hurricane Intensity Error by Forecast Time')
+    plt.title('Storm Intensity Error by Forecast Time')
     plt.grid(True)
     plt.savefig(os.path.join(output_dir, 'wind_speed_error_by_time.png'))
     
-    # Plot 3: Position error by hurricane
+    # Plot 3: Error by storm type (NEW)
     plt.figure(figsize=(12, 6))
-    hurricane_names = [next(h["name"] for h in TEST_HURRICANES if h["id"] == hid) 
-                     for hid in results["summary"]["by_hurricane"].keys()]
-    avg_errors = [results["summary"]["by_hurricane"][hid]["avg_position_error"] 
-                for hid in results["summary"]["by_hurricane"].keys()]
+    type_names = list(results["summary"]["by_type"].keys())
+    type_errors = [results["summary"]["by_type"][t]["avg_position_error"] for t in type_names]
+    type_intensity_errors = [results["summary"]["by_type"][t]["avg_wind_speed_error"] for t in type_names]
     
-    plt.bar(hurricane_names, avg_errors, color='skyblue')
-    plt.xlabel('Hurricane')
-    plt.ylabel('Average Position Error (km)')
-    plt.title('Average Position Error by Hurricane')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'position_error_by_hurricane.png'))
-    
-    # Plot 4: Position error by basin
-    plt.figure(figsize=(10, 6))
-    basin_names = list(results["summary"]["by_basin"].keys())
-    basin_full_names = {'NA': 'North Atlantic', 'EP': 'Eastern Pacific', 
-                        'WP': 'Western Pacific', 'NI': 'North Indian', 
-                        'SI': 'South Indian', 'SP': 'South Pacific'}
-    
-    basin_labels = [basin_full_names.get(b, b) for b in basin_names]
-    avg_errors = [results["summary"]["by_basin"][b]["avg_position_error"] for b in basin_names]
-    
-    plt.bar(basin_labels, avg_errors, color='lightgreen')
-    plt.xlabel('Ocean Basin')
-    plt.ylabel('Average Position Error (km)')
-    plt.title('Average Position Error by Ocean Basin')
-    plt.savefig(os.path.join(output_dir, 'position_error_by_basin.png'))
-    
-    # Plot 5: Combined plot for published paper
-    plt.figure(figsize=(12, 10))
-    
-    # First subplot: Position error by time
-    plt.subplot(2, 2, 1)
-    times = [24, 48, 72, 96, 120]
-    avg_errors = [results["summary"]["overall"]["by_time"][t]["avg_position_error"] for t in times]
-    plt.plot(times, avg_errors, 'o-', linewidth=2, markersize=8, color='blue')
-    plt.xlabel('Forecast Time (hours)')
-    plt.ylabel('Avg Position Error (km)')
-    plt.title('Position Error by Forecast Time')
-    plt.grid(True)
-    
-    # Second subplot: Intensity error by time
-    plt.subplot(2, 2, 2)
-    avg_errors = [results["summary"]["overall"]["by_time"][t]["avg_wind_speed_error"] for t in times]
-    plt.plot(times, avg_errors, 'o-', linewidth=2, markersize=8, color='red')
-    plt.xlabel('Forecast Time (hours)')
-    plt.ylabel('Avg Wind Speed Error (mph)')
-    plt.title('Intensity Error by Forecast Time')
-    plt.grid(True)
-    
-    # Third subplot: Error by hurricane
-    plt.subplot(2, 2, 3)
-    hurricane_names = [next(h["name"] for h in TEST_HURRICANES if h["id"] == hid).split(' ')[1]
-                     for hid in results["summary"]["by_hurricane"].keys()]
-    pos_errors = [results["summary"]["by_hurricane"][hid]["avg_position_error"] 
-                for hid in results["summary"]["by_hurricane"].keys()]
-    int_errors = [results["summary"]["by_hurricane"][hid]["avg_wind_speed_error"] 
-                for hid in results["summary"]["by_hurricane"].keys()]
-    
-    x = np.arange(len(hurricane_names))
+    x = np.arange(len(type_names))
     width = 0.35
-    plt.bar(x - width/2, pos_errors, width, label='Position (km)')
-    plt.bar(x + width/2, int_errors, width, label='Intensity (mph)')
-    plt.xlabel('Hurricane')
+    plt.bar(x - width/2, type_errors, width, label='Position (km)', color='royalblue')
+    plt.bar(x + width/2, type_intensity_errors, width, label='Intensity (mph)', color='tomato')
+    plt.xlabel('Storm Type')
     plt.ylabel('Average Error')
-    plt.title('Error by Hurricane')
-    plt.xticks(x, hurricane_names)
+    plt.title('Error by Storm Type')
+    plt.xticks(x, type_names, rotation=30, ha='right')
     plt.legend()
-    
-    # Fourth subplot: Error by basin
-    plt.subplot(2, 2, 4)
-    basin_errors = {}
-    for basin in results["summary"]["by_basin"]:
-        for time in [24, 48, 72]:
-            if time in results["summary"]["by_basin"][basin]["by_time"]:
-                if basin not in basin_errors:
-                    basin_errors[basin] = []
-                basin_errors[basin].append(results["summary"]["by_basin"][basin]["by_time"][time]["avg_position_error"])
-    
-    basin_labels = [basin_full_names.get(b, b) for b in basin_errors.keys()]
-    basin_avg_errors = [np.mean(errors) for errors in basin_errors.values()]
-    
-    plt.bar(basin_labels, basin_avg_errors, color='purple')
-    plt.xlabel('Ocean Basin')
-    plt.ylabel('Avg Position Error (km)')
-    plt.title('Error by Ocean Basin (24-72h)')
-    plt.xticks(rotation=45)
-    
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'combined_performance_metrics.png'))
+    plt.savefig(os.path.join(output_dir, 'error_by_storm_type.png'))
     
-    print(f"Plots saved to {output_dir} directory")
+    # Save results to file
+    with open(os.path.join(output_dir, 'results.json'), 'w') as f:
+        json.dump(results, f, indent=2)
 
 def print_results(results: Dict[str, Any]):
-    """
-    Print evaluation results to console.
-    
-    Args:
-        results: Dictionary with evaluation metrics
-    """
-    print("\n===== HURRICANE PREDICTION AGENT EVALUATION =====\n")
+    """Print evaluation results to console."""
+    print("\n===== STORM PREDICTION AGENT EVALUATION =====\n")
     
     # Overall performance
     print("OVERALL PERFORMANCE:")
     print(f"  Average Position Error: {results['summary']['overall']['avg_position_error']:.2f} km")
     print(f"  Average Wind Speed Error: {results['summary']['overall']['avg_wind_speed_error']:.2f} mph")
-    print(f"  Average Pressure Error: {results['summary']['overall']['avg_pressure_error']:.2f} mb")
     
     # Performance by forecast time
     print("\nPERFORMANCE BY FORECAST TIME:")
@@ -436,67 +239,30 @@ def print_results(results: Dict[str, Any]):
         print(f"  {time} hours:")
         print(f"    Position Error: {time_results['avg_position_error']:.2f} km")
         print(f"    Wind Speed Error: {time_results['avg_wind_speed_error']:.2f} mph")
-        print(f"    Pressure Error: {time_results['avg_pressure_error']:.2f} mb")
     
-    # Performance by basin
-    print("\nPERFORMANCE BY BASIN:")
-    basin_full_names = {'NA': 'North Atlantic', 'EP': 'Eastern Pacific', 
-                        'WP': 'Western Pacific', 'NI': 'North Indian', 
-                        'SI': 'South Indian', 'SP': 'South Pacific'}
-    
-    for basin in sorted(results["summary"]["by_basin"].keys()):
-        basin_name = basin_full_names.get(basin, basin)
-        basin_results = results["summary"]["by_basin"][basin]
-        print(f"  {basin_name}:")
-        print(f"    Position Error: {basin_results['avg_position_error']:.2f} km")
-        print(f"    Wind Speed Error: {basin_results['avg_wind_speed_error']:.2f} mph")
-        print(f"    Pressure Error: {basin_results['avg_pressure_error']:.2f} mb")
-    
-    # Performance by hurricane
-    print("\nPERFORMANCE BY HURRICANE:")
-    for hurricane_id in sorted(results["summary"]["by_hurricane"].keys()):
-        hurricane_name = next(h["name"] for h in TEST_HURRICANES if h["id"] == hurricane_id)
-        hurricane_results = results["summary"]["by_hurricane"][hurricane_id]
-        print(f"  {hurricane_name}:")
-        print(f"    Position Error: {hurricane_results['avg_position_error']:.2f} km")
-        print(f"    Wind Speed Error: {hurricane_results['avg_wind_speed_error']:.2f} mph")
-        print(f"    Pressure Error: {hurricane_results['avg_pressure_error']:.2f} mb")
+    # Performance by storm type (NEW)
+    print("\nPERFORMANCE BY STORM TYPE:")
+    for storm_type in sorted(results["summary"]["by_type"].keys()):
+        type_results = results["summary"]["by_type"][storm_type]
+        print(f"  {storm_type}:")
+        print(f"    Position Error: {type_results['avg_position_error']:.2f} km")
+        print(f"    Wind Speed Error: {type_results['avg_wind_speed_error']:.2f} mph")
     
     print("\n==========================================")
 
-def save_results(results: Dict[str, Any], output_file: str = "evaluation_results/results.json"):
-    """
-    Save evaluation results to file.
-    
-    Args:
-        results: Dictionary with evaluation metrics
-        output_file: File to save results
-    """
-    # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    
-    # Save results to file
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=2)
-    
-    print(f"Results saved to {output_file}")
-
 def main():
-    """Main function to evaluate the hurricane prediction agent."""
-    print("Initializing hurricane prediction agent...")
+    """Main function to evaluate the storm prediction agent."""
+    print("Initializing storm prediction agent...")
     
     # Create agent with default configuration
     agent = HurricanePredictionAgent()
     
     # Run evaluation
-    print("Evaluating agent on test hurricanes...")
+    print("Evaluating agent on test storms...")
     results = evaluate_agent(agent)
     
     # Print results
     print_results(results)
-    
-    # Save results
-    save_results(results)
     
     # Plot results
     plot_results(results)
