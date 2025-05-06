@@ -135,8 +135,10 @@ class TrajectoryAgent(BaseAgent):
         lon_action = action_idx % 3   # 0, 1, 2 for west, no change, east
         
         # Convert to changes (trajectory agent focuses only on position)
-        lat_changes = [-0.5, 0.0, 0.5]  # South, no change, north
-        lon_changes = [-0.5, 0.0, 0.5]  # West, no change, east
+        lat_changes = [-0.15, 0.0, 0.15]  # Reduce from [-0.5, 0.0, 0.5]
+        lon_changes = [-0.15, 0.0, 0.15]  # Reduce from [-0.5, 0.0, 0.5]
+
+
         
         lat_change = lat_changes[lat_action]
         lon_change = lon_changes[lon_action]
@@ -159,10 +161,21 @@ class TrajectoryAgent(BaseAgent):
         # Apply changes
         new_lat = current_lat + lat_change
         new_lon = current_lon + lon_change
-        
+
+        # Limit movement to be closer to current position
+        lat_diff = abs(new_lat - current_lat)
+        lon_diff = abs(new_lon - current_lon)
+
+        # If movement is too large, scale it back
+        if lat_diff > 0.8:
+            new_lat = current_lat + (0.8 * (1 if new_lat > current_lat else -1))
+            
+        if lon_diff > 0.8:
+            new_lon = current_lon + (0.8 * (1 if new_lon > current_lon else -1))
+
         # Ensure latitude is within bounds
         new_lat = max(-90, min(90, new_lat))
-        
+
         # Ensure longitude is within bounds
         new_lon = ((new_lon + 180) % 360) - 180
         

@@ -23,11 +23,12 @@ class EnsembleCoordinator:
         """Initialize the ensemble coordinator with specialized agents."""
         # Default options
         self.options = {
-            "use_basin_specific": True,
-            "trajectory_weight": 0.4,
-            "intensity_weight": 0.4,
-            "basin_weight": 0.2,
-            "dynamic_weighting": True
+            "use_basin_specific": False,
+            "trajectory_weight": 0.7,     # Increase trajectory weight further
+            "intensity_weight": 0.3,      # Keep intensity weight the same
+            "basin_weight": 0.0,          # Set to zero
+            "dynamic_weighting": False    # Keep dynamic weighting off
+
         }
         
         # Update with provided options
@@ -197,6 +198,26 @@ class EnsembleCoordinator:
             intensity_uncertainty["wind_speed"] += basin_prediction.get("uncertainty", {}).get("wind_speed", 0) * basin_weight
             intensity_uncertainty["pressure"] += basin_prediction.get("uncertainty", {}).get("pressure", 0) * basin_weight
         
+        # Validate final values
+        weighted_wind = max(30, min(150, weighted_wind))  # Reasonable wind range
+        weighted_pressure = max(920, min(1015, weighted_pressure))  # Reasonable pressure range
+
+        # Ensure pressure and wind are physically consistent
+        if weighted_wind < 39:  # TD
+            weighted_pressure = max(1000, weighted_pressure)
+        elif weighted_wind < 74:  # TS
+            weighted_pressure = min(1000, max(985, weighted_pressure))
+        elif weighted_wind < 96:  # Cat 1
+            weighted_pressure = min(985, max(970, weighted_pressure))
+        elif weighted_wind < 111:  # Cat 2
+            weighted_pressure = min(970, max(955, weighted_pressure))
+        elif weighted_wind < 130:  # Cat 3
+            weighted_pressure = min(955, max(935, weighted_pressure))
+        elif weighted_wind < 157:  # Cat 4
+            weighted_pressure = min(935, max(915, weighted_pressure))
+        else:  # Cat 5
+            weighted_pressure = min(915, weighted_pressure)
+
         # Combine all into final prediction
         return {
             "position": {"lat": weighted_lat, "lon": weighted_lon},

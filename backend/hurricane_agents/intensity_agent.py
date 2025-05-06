@@ -145,13 +145,22 @@ class IntensityAgent(BaseAgent):
         
         # Calculate new intensity values
         new_wind = max(0, current_wind + intensity_change)
-        
-        # Calculate pressure using enhanced wind-pressure relationship
-        # P = 1010 - (wind_speed/1.15)^2/100
-        new_pressure = 1010 - (new_wind / 1.15)**2 / 100
-        
-        # Constrain pressure to realistic values
-        new_pressure = max(880, min(1020, new_pressure))
+
+        # Better pressure calculation based on the Saffir-Simpson scale relationship
+        if new_wind < 39:  # Tropical depression
+            new_pressure = random.uniform(1000, 1010)
+        elif new_wind < 74:  # Tropical storm
+            new_pressure = random.uniform(985, 1000)
+        elif new_wind < 96:  # Category 1
+            new_pressure = random.uniform(980, 985)
+        elif new_wind < 111:  # Category 2
+            new_pressure = random.uniform(965, 979)
+        elif new_wind < 130:  # Category 3
+            new_pressure = random.uniform(945, 964)
+        elif new_wind < 157:  # Category 4
+            new_pressure = random.uniform(920, 944)
+        else:  # Category 5
+            new_pressure = random.uniform(880, 919)
         
         # Return intensity prediction only - that's this agent's focus
         return {
