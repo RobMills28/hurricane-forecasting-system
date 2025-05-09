@@ -54,14 +54,14 @@ const generatePrediction = async () => {
       pressure: selectedHurricane.pressure,
       basin: selectedHurricane.basin,
       sea_surface_temp: {
-        value: 28.5 // This would typically come from actual data
+        value: 28.5 // I need to replace this with actual data
       },
       time_step: 0 // Initial time step
     };
     
     // Prepare history data if available
     const history = [];
-    // In a full implementation, we would include recent track history
+    // If I get a chance, I could include recent track history
     
     console.log("API input params:", {
       hurricane: selectedHurricane.name,

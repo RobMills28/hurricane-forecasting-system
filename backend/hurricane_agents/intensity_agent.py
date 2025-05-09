@@ -1,7 +1,7 @@
 """
 Intensity Agent for Hurricane Prediction
 
-This agent specializes in predicting hurricane intensity (wind speed and pressure).
+This agent specialises in predicting hurricane intensity (wind speed and pressure).
 """
 
 import torch
@@ -13,10 +13,10 @@ from typing import Dict, List
 from .base_agent import BaseAgent
 
 class IntensityAgent(BaseAgent):
-    """Agent specialized for hurricane intensity prediction."""
+    """Agent specialised for hurricane intensity prediction."""
     
     def __init__(self, options: Dict = None):
-        """Initialize the intensity agent with specialized options."""
+        """Initialise the intensity agent with specialised options."""
         # Default options with intensity-specific adjustments
         intensity_options = {
             "state_dim": 12,
@@ -28,7 +28,7 @@ class IntensityAgent(BaseAgent):
         if options:
             intensity_options.update(options)
         
-        # Initialize base agent
+        # Initialise base agent
         super().__init__(intensity_options)
         
         # Intensity importance factor
@@ -110,8 +110,8 @@ class IntensityAgent(BaseAgent):
         current_wind = state.get("wind_speed", 0)
         current_pressure = state.get("pressure", 1010)
         
-        # For intensity agent, we care about wind speed and pressure changes
-        # We represent actions as intensity change options
+        # For intensity agent, I care about wind speed and pressure changes
+        # I am representing actions as intensity change options
         
         # Calculate intensity changes based on action
         # 0: major decrease, 1: slight decrease, 2: no change, 
@@ -173,7 +173,7 @@ class IntensityAgent(BaseAgent):
         # Extract predicted intensity change
         intensity_change = prediction.get("wind_speed", 0) - prediction.get("wind_speed_prev", 0)
         
-        # Discretize intensity change into action
+        # Discretise intensity change into action
         if intensity_change <= -15:
             return 0  # Major decrease
         elif intensity_change <= -5:

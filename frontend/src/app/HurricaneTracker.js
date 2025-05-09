@@ -173,7 +173,7 @@ export default function HurricaneTracker() {
         );
         
         // Add some additional WP regions for better spatial coverage
-        // This helps ensure we get more storms with different categories
+        // This helps ensure I'm getting more storms with different categories
         globalRegions.push('WP');  // Add Western Pacific again to increase sampling
       }
       

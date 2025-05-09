@@ -43,7 +43,7 @@ export async function getActiveHurricanes() {
 }
 
 /**
- * Process weather alerts into a standardized format
+ * Process weather alerts into a standardised format
  */
 function processWeatherAlerts(alerts) {
   return alerts.map(alert => {
@@ -186,7 +186,7 @@ export async function getHurricaneObservations(lat, lon) {
       // Try an alternative endpoint or approach if the main one fails
       // If lat/lon is in US, try a secondary endpoint or static list of reliable stations
       if (isInUnitedStates(lat, lon)) {
-        // For US locations, we could try a hardcoded reliable station nearby
+        // For US locations, I could try a hardcoded reliable station nearby
         return await tryBackupUSStation(lat, lon);
       } else {
         // If outside US, try OpenMeteo as an alternative source
@@ -300,7 +300,7 @@ async function tryBackupUSStation(lat, lon) {
 }
 
 /**
- * Process weather observations into a standardized format
+ * Process weather observations into a standardised format
  */
 function processObservations(obs) {
   // Handle potentially null values with default values

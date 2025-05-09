@@ -37,11 +37,11 @@ async def fetch_historical_hurricane_data(options: Dict = None) -> List[Dict]:
         options = {}
     
     try:
-        # If we're already loading data, return the existing promise
+        # Return the existing promise if data is already loading
         if data_load_promise is not None:
             return await data_load_promise
         
-        # If we have cached data and aren't forced to reload, use cache
+        # Use cached data unless a forced reload is required
         if cached_hurricanes is not None and not options.get('force_reload', False):
             logger.info('Using cached hurricane data')
             return cached_hurricanes
@@ -57,13 +57,11 @@ async def fetch_historical_hurricane_data(options: Dict = None) -> List[Dict]:
         
         logger.info(f'Fetching historical hurricane data with options: {merged_options}')
         
-        # In a real implementation, this would call the ibtracs connector
-        # For now, just simulate data
+        # For now, I am just simulating the data
         try:
-            # This is where we would call the IBTrACS connector
+            # This is where I should call the IBTrACS connector
             # data = await fetch_ibtracs_hurricanes(merged_options)
             
-            # For development, use simulated data
             data = simulate_historical_data()
             
             logger.info(f'Loaded {len(data)} historical hurricanes')
@@ -206,7 +204,7 @@ def preprocess_data_for_training(hurricanes: List[Dict]) -> List[Dict]:
     Returns:
         Preprocessed data
     """
-    # Extract features and normalize
+    # Extract features and normalise
     return [preprocess_hurricane(hurricane) for hurricane in hurricanes]
 
 def preprocess_hurricane(hurricane: Dict) -> Dict:
@@ -232,7 +230,7 @@ def preprocess_hurricane(hurricane: Dict) -> Dict:
         prev_point = track[index - 1] if index > 0 else point
         
         # Calculate time difference in hours
-        time_diff_hours = 6  # Assume 6-hour intervals if no timestamps
+        time_diff_hours = 6  # I am assuming 6-hour intervals if no timestamps
         if 'timestamp' in point and 'timestamp' in prev_point:
             try:
                 current_time = pd.Timestamp(point['timestamp'])
@@ -268,8 +266,8 @@ def preprocess_hurricane(hurricane: Dict) -> Dict:
             pressure_prev = safe_get(prev_point, 'pressure', default=1000)
             pressure_change_rate = (pressure_current - pressure_prev) / time_diff_hours
         
-        # Normalize wind speed relative to maximum
-        normalized_wind_speed = (point.get('wind_speed', 0) / max_wind_speed) if max_wind_speed > 0 else 0
+        # Normalise wind speed relative to maximum
+        normalised_wind_speed = (point.get('wind_speed', 0) / max_wind_speed) if max_wind_speed > 0 else 0
         
         # Calculate distance from genesis (initial position)
         distance_from_genesis = haversine_distance(
@@ -304,7 +302,7 @@ def preprocess_hurricane(hurricane: Dict) -> Dict:
             'lon_change_rate': lon_change_rate,
             'wind_speed_change_rate': wind_speed_change_rate,
             'pressure_change_rate': pressure_change_rate,
-            'normalized_wind_speed': normalized_wind_speed,
+            'normalised_wind_speed': normalised_wind_speed,
             'distance_from_genesis': distance_from_genesis,
             'hours_since_genesis': hours_since_genesis,
             
@@ -333,10 +331,10 @@ def get_storm_phase(index: int, total_length: int) -> str:
     if total_length <= 0:
         return "unknown"
         
-    normalized_position = index / total_length
+    normalised_position = index / total_length
     
-    if normalized_position < 0.3:
+    if normalised_position < 0.3:
         return "early"    # Formation/Intensification
-    if normalized_position < 0.7:
+    if normalised_position < 0.7:
         return "peak"     # Mature/Peak
     return "late"         # Weakening/Dissipation

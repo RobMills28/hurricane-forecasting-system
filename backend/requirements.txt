@@ -18,12 +18,9 @@ fastapi>=0.68.0
 uvicorn>=0.15.0
 requests>=2.26.0
 
-# Visualization (for development and testing)
+# Visualisation (for development and testing)
 matplotlib>=3.4.3
 seaborn>=0.11.2
 
 # Utilities
 tqdm>=4.62.3
-
-# Machine learning
-torch>=1.9.0

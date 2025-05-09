@@ -166,13 +166,13 @@ const GLOBAL_STORM_HOTSPOTS = {
   ]
 };
 
-// Cache for responses to minimize API calls and fix persistence issues
+// Cache for responses to minimise API calls and fix persistence issues
 // Changed to use localStorage for persistence between refreshes
 const CACHE_KEY_PREFIX = 'openMeteo_cache_';
 const CACHE_DURATION = 120 * 60 * 1000; // 2 hours - extended for better persistence
 
 /**
- * Initialize or retrieve cache from localStorage
+ * Initialise or retrieve cache from localStorage
  */
 function getResponseCache() {
   try {
@@ -206,7 +206,7 @@ function getResponseCache() {
   }
 }
 
-// Initialize the response cache
+// Initialise the response cache
 const responseCache = getResponseCache();
 
 /**
@@ -418,7 +418,7 @@ function detectStorms(hourly, daily, region) {
   
   // Check for continuous periods of severe weather with strong winds
   for (let i = 0; i < hourly.time.length; i++) {
-    // Skip if missing all the data we need
+    // Skip if missing all the data I need
     if (!hourly.weather_code?.[i] || 
         !hourly.wind_speed_10m?.[i] || 
         !hourly.pressure_msl?.[i]) {
@@ -581,7 +581,7 @@ function classifyStorm(windSpeed, pressure, region) {
     
     stormType = 'Winter Storm';
     
-    // Enhanced categorization for winter storms with better distribution
+    // Enhanced categorisation for winter storms with better distribution
     if (windSpeed >= 95) category = '4';
     else if (windSpeed >= 75) category = '3';
     else if (windSpeed >= 60) category = '2';
@@ -617,10 +617,10 @@ else if (windSpeed >= STORM_THRESHOLDS.HURRICANE_1.windSpeed * 0.9) { // Lower t
     stormType = 'Tropical Depression';
     category = 'TD';
   }
-  // Severe thunderstorm with improved categorization
+  // Severe thunderstorm with improved categorisation
   else if (windSpeed >= STORM_THRESHOLDS.SEVERE_THUNDERSTORM.windSpeed) {
     stormType = 'Severe Thunderstorm';
-    // More granular categorization for thunderstorms
+    // More granular categorisation for thunderstorms
     if (windSpeed >= 105) category = '3';
     else if (windSpeed >= 90) category = '2';
     else category = '1';
@@ -865,7 +865,7 @@ function getExpirationTime(lastTime) {
  * Get active severe weather events globally by region
  * Polls hotspots for each region to find severe storms
  * @param {string} region - Optional region code to filter results
- * @returns {Promise<Array>} Active storms in standardized format
+ * @returns {Promise<Array>} Active storms in standardised format
  */
 export async function getActiveHurricanesByRegion(region = 'GLOBAL') {
   try {

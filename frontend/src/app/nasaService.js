@@ -89,7 +89,7 @@ export async function getNasaImagery(lat, lon, date = new Date().toISOString().s
 
 /**
  * Fetches NASA GIBS (Global Imagery Browse Services) layer information
- * This provides various Earth observation visualizations like Sea Surface Temperature
+ * This provides various Earth observation visualisations like Sea Surface Temperature
  * 
  * @returns {Promise<Object[]>} Array of available GIBS layers
  */
@@ -100,7 +100,7 @@ export async function getGibsLayers() {
       return Array.from(layerCache.values());
     }
     
-    // NASA GIBS doesn't have a direct API to list layers, so we're returning a curated list
+    // NASA GIBS doesn't have a direct API to list layers, so I'll return a curated list
     // In a production app, you might fetch this from a more dynamic source
     const layers = [
       {
@@ -306,7 +306,7 @@ function filterAlerts(alerts, options = {}) {
 }
 
 /**
- * Process weather alerts into a standardized format
+ * Process weather alerts into a standardised format
  */
 function processWeatherAlerts(alerts) {
   return alerts.map(alert => {
@@ -505,7 +505,7 @@ export async function getHurricaneObservations(lat, lon) {
 }
 
 /**
- * Process weather observations into a standardized format
+ * Process weather observations into a standardised format
  */
 function processObservations(obs) {
   // Handle potentially null values with default values

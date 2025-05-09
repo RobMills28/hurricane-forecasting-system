@@ -11,7 +11,7 @@ class HurricaneEnvironment {
   }
   
   // Stub methods to maintain compatibility
-  async initialize() { return {}; }
+  async initialise() { return {}; }
   reset() { return {}; }
   getState() { return {}; }
   step() { return { state: {}, reward: 0, done: true }; }

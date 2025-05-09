@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, List, Any
 
-# Import both agent implementations
+# Here I am importing both agent implementations
 from hurricane_agents.single_agent import HurricanePredictionAgent
 from hurricane_agents.ensemble import EnsembleCoordinator
 from evaluate import evaluate_agent
@@ -21,8 +21,8 @@ def compare_agent_performance():
     """Compare performance of single agent vs multi-agent ensemble system."""
     print("\n===== HURRICANE AGENT COMPARISON =====\n")
     
-    # Initialize both agent systems
-    print("Initializing single agent and multi-agent systems...")
+    # Initialise both agent systems
+    print("Initialising single agent and multi-agent systems...")
     single_agent = HurricanePredictionAgent()
     multi_agent = EnsembleCoordinator()
     
@@ -33,7 +33,7 @@ def compare_agent_performance():
     print("\nEvaluating multi-agent ensemble performance...")
     multi_results = evaluate_agent(multi_agent)
     
-    # Generate comparison visualizations
+    # Generate comparison visualisations
     print("\nGenerating comparison charts...")
     generate_comparison_charts(single_results, multi_results)
     
@@ -47,7 +47,7 @@ def compare_agent_performance():
     }
 
 def generate_comparison_charts(single_results: Dict, multi_results: Dict):
-    """Generate visualizations comparing both agent systems."""
+    """Generate visualisations comparing both agent systems."""
     # Create output directory
     os.makedirs('comparison_results', exist_ok=True)
     

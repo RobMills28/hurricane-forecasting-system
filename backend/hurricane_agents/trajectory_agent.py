@@ -1,7 +1,7 @@
 """
 Trajectory Agent for Hurricane Prediction
 
-This agent specializes in predicting hurricane movement paths.
+This agent specialises in predicting hurricane movement paths.
 """
 
 import torch
@@ -13,10 +13,10 @@ from typing import Dict, List
 from .base_agent import BaseAgent
 
 class TrajectoryAgent(BaseAgent):
-    """Agent specialized for hurricane trajectory prediction."""
+    """Agent specialised for hurricane trajectory prediction."""
     
     def __init__(self, options: Dict = None):
-        """Initialize the trajectory agent with specialized options."""
+        """Initialise the trajectory agent with specialised options."""
         # Default options with trajectory-specific adjustments
         trajectory_options = {
             "state_dim": 12,
@@ -28,10 +28,10 @@ class TrajectoryAgent(BaseAgent):
         if options:
             trajectory_options.update(options)
         
-        # Initialize base agent
+        # Initialise base agent
         super().__init__(trajectory_options)
         
-        # Position importance factor (emphasize position accuracy)
+        # Position importance factor (emphasise position accuracy)
         self.position_weight = 0.8  # Higher weighting for position in rewards
         
         # Movement patterns for different basins
@@ -127,8 +127,8 @@ class TrajectoryAgent(BaseAgent):
         current_lat = position.get("lat", 0)
         current_lon = position.get("lon", 0)
         
-        # For trajectory agent, we only care about position changes
-        # We represent actions as a 3x3 grid of possible lat/lon changes
+        # For trajectory agent, I only care about position changes
+        # I represent actions as a 3x3 grid of possible lat/lon changes
         
         # Calculate lat/lon changes based on action
         lat_action = action_idx // 3  # 0, 1, 2 for south, no change, north
@@ -191,7 +191,7 @@ class TrajectoryAgent(BaseAgent):
         lat_change = position.get("lat", 0) - position.get("lat_prev", 0)
         lon_change = position.get("lon", 0) - position.get("lon_prev", 0)
         
-        # Discretize lat change
+        # Discretise lat change
         if lat_change <= -0.25:
             lat_action = 0  # South
         elif lat_change <= 0.25:
@@ -199,7 +199,7 @@ class TrajectoryAgent(BaseAgent):
         else:
             lat_action = 2  # North
         
-        # Discretize lon change
+        # Discretise lon change
         if lon_change <= -0.25:
             lon_action = 0  # West
         elif lon_change <= 0.25:

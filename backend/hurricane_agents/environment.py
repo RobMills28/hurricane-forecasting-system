@@ -19,19 +19,19 @@ class HurricaneEnvironment:
     """
     
     def __init__(self):
-        """Initialize the hurricane environment."""
+        """Initialise the hurricane environment."""
         self.hurricane_data = []  # Historical hurricane data
         self.nasa_data = {}       # NASA data layers (sea surface temp, etc.)
         self.current_state = None
         self.previous_state = None  # Track previous state for reward calculation
         self.time_step = 0        # Current time step in the simulation
         self.history = []         # Track agent predictions for evaluation
-        self.basin_models = {}    # Basin-specific models for regional specialization
+        self.basin_models = {}    # Basin-specific models for regional specialisation
         self.action_space_size = 15  # 5 latitude dirs x 3 longitude dirs x 1 intensity
     
-    async def initialize(self, historical_data: List[Dict], nasa_data_service: Dict) -> Dict:
+    async def initialise(self, historical_data: List[Dict], nasa_data_service: Dict) -> Dict:
         """
-        Initialize the environment with data.
+        Initialise the environment with data.
         
         Args:
             historical_data: List of historical hurricane data
@@ -43,15 +43,15 @@ class HurricaneEnvironment:
         self.hurricane_data = historical_data
         self.nasa_data = nasa_data_service
         
-        # Organize data by basin for basin-specific training
+        # Organise data by basin for basin-specific training
         self.organize_data_by_basin()
         
         self.reset()
         return self.get_state()
     
     def organize_data_by_basin(self) -> None:
-        """Organize hurricane data by basin for specialized training."""
-        # [Existing implementation - no changes needed]
+        """Organise hurricane data by basin for specialised training."""
+        # [I'll keep my existing implementation - no changes needed]
         basin_data = {}
         
         for hurricane in self.hurricane_data:
@@ -132,7 +132,7 @@ class HurricaneEnvironment:
                 "value": self.estimate_sea_surface_temp_for_location(position)
             }
         
-        # In a complete implementation, this would query NASA data for the coordinates
+        # In a complete implementation, I should query NASA data for the coordinates
         try:
             # Estimate SST based on position and climate patterns
             return {
@@ -158,7 +158,7 @@ class HurricaneEnvironment:
         # Base temperature based on absolute latitude (warmer near equator)
         latitude_effect = 30 - (abs(lat) * 0.3)
         
-        # Longitude effects - customized by ocean basin
+        # Longitude effects - customised by ocean basin
         basin_effect = 0
         
         # Simplified basin determination

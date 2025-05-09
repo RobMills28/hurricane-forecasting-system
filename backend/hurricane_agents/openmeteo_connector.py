@@ -129,7 +129,7 @@ async def fetch_open_meteo_data(lat: float, lon: float, basin: str = "GLOBAL", i
             'source': 'OpenMeteo'
         }
         
-        # Process into a standardized format
+        # Process into a standardised format
         processed_data = process_openmeteo_data(combined_data)
         
         # Cache the result
@@ -174,7 +174,7 @@ async def fetch_marine(session: aiohttp.ClientSession, params: Dict) -> Dict:
         raise e
 
 def process_openmeteo_data(data: Dict) -> Dict:
-    """Process OpenMeteo data into a standardized format for the RL agent"""
+    """Process OpenMeteo data into a standardised format for the RL agent"""
     try:
         if 'error' in data:
             return data
@@ -223,7 +223,7 @@ def process_openmeteo_data(data: Dict) -> Dict:
         # Determine storm category
         category = get_storm_category(max_wind_speed, min_pressure)
         
-        # Create a standardized observation format (matching NOAA format as closely as possible)
+        # Create a standardised observation format (matching NOAA format as closely as possible)
         observations = {
             'timestamp': hourly_data[0].get('time') if hourly_data else None,
             'temperature': hourly_data[0].get('temperature') if hourly_data else None,
@@ -235,7 +235,7 @@ def process_openmeteo_data(data: Dict) -> Dict:
             'dataSource': 'OpenMeteo'
         }
         
-        # Generate forecast data in standardized format
+        # Generate forecast data in standardised format
         forecast_data = []
         
         time_steps = [0, 6, 12, 18, 24, 36, 48, 72, 96, 120]  # Hours ahead
@@ -329,7 +329,7 @@ async def get_active_hurricanes_by_region(region: str = "GLOBAL") -> List[Dict]:
         region: Optional region code to filter results (WP, EP, NA, NI, SI, SP, or GLOBAL)
         
     Returns:
-        List of active storms in standardized format
+        List of active storms in standardised format
     """
     try:
         all_storms = []

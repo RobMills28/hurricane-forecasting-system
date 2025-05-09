@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the agent and utility functions
+# Here I am importing the agent and utility functions
 from hurricane_agents.single_agent import HurricanePredictionAgent
 from hurricane_agents.utils import haversine_distance, get_hurricane_category
 
@@ -99,7 +99,7 @@ def evaluate_agent(agent: HurricanePredictionAgent) -> Dict[str, Any]:
     for storm in TEST_STORMS:
         storm_id, basin, storm_type = storm["id"], storm["basin"], storm["type"]
         
-        # Initialize results containers if needed
+        # Initialise results containers if needed
         for container_type, key in [("by_storm", storm_id), ("by_basin", basin), ("by_type", storm_type)]:
             if key not in results[container_type]:
                 results[container_type][key] = {
@@ -201,7 +201,7 @@ def plot_results(results: Dict[str, Any], output_dir: str = "evaluation_results"
     plt.grid(True)
     plt.savefig(os.path.join(output_dir, 'wind_speed_error_by_time.png'))
     
-    # Plot 3: Error by storm type (NEW)
+    # Plot 3: Error by storm type
     plt.figure(figsize=(12, 6))
     type_names = list(results["summary"]["by_type"].keys())
     type_errors = [results["summary"]["by_type"][t]["avg_position_error"] for t in type_names]
@@ -240,7 +240,7 @@ def print_results(results: Dict[str, Any]):
         print(f"    Position Error: {time_results['avg_position_error']:.2f} km")
         print(f"    Wind Speed Error: {time_results['avg_wind_speed_error']:.2f} mph")
     
-    # Performance by storm type (NEW)
+    # Performance by storm type
     print("\nPERFORMANCE BY STORM TYPE:")
     for storm_type in sorted(results["summary"]["by_type"].keys()):
         type_results = results["summary"]["by_type"][storm_type]
@@ -252,7 +252,7 @@ def print_results(results: Dict[str, Any]):
 
 def main():
     """Main function to evaluate the storm prediction agent."""
-    print("Initializing storm prediction agent...")
+    print("Initialising storm prediction agent...")
     
     # Create agent with default configuration
     agent = HurricanePredictionAgent()

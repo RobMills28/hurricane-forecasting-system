@@ -1,7 +1,7 @@
 """
 Ensemble Coordinator for Hurricane Prediction
 
-This module combines predictions from specialized hurricane prediction agents.
+This module combines predictions from specialised hurricane prediction agents.
 """
 
 import math
@@ -13,14 +13,14 @@ from .basin_specific_agent import BasinSpecificAgent
 
 class EnsembleCoordinator:
     """
-    Coordinates multiple specialized agents for hurricane prediction.
+    Coordinates multiple specialised agents for hurricane prediction.
     
-    This class manages the ensemble of specialized agents and combines
+    This class manages the ensemble of specialised agents and combines
     their predictions based on their expertise and confidence.
     """
     
     def __init__(self, options: Dict = None):
-        """Initialize the ensemble coordinator with specialized agents."""
+        """Initialise the ensemble coordinator with specialised agents."""
         # Default options
         self.options = {
             "use_basin_specific": False,
@@ -35,11 +35,11 @@ class EnsembleCoordinator:
         if options:
             self.options.update(options)
         
-        # Initialize specialized agents
+        # Initialise specialised agents
         self.trajectory_agent = TrajectoryAgent()
         self.intensity_agent = IntensityAgent()
         
-        # Initialize basin-specific agents
+        # Initialise basin-specific agents
         self.basin_agents = {}
         if self.options["use_basin_specific"]:
             self.basin_agents = {
@@ -51,7 +51,7 @@ class EnsembleCoordinator:
     
     def predict(self, state: Dict, history: List[Dict], training: bool = False) -> Dict:
         """
-        Make a coordinated prediction using all specialized agents.
+        Make a coordinated prediction using all specialised agents.
         
         Args:
             state: Current hurricane state
@@ -60,7 +60,7 @@ class EnsembleCoordinator:
         Returns:
             Combined prediction from all agents
         """
-        # Get predictions from specialized agents
+        # Get predictions from specialised agents
         trajectory_prediction = self.trajectory_agent.predict(state, history, training)
         intensity_prediction = self.intensity_agent.predict(state, history, training)
         
@@ -86,7 +86,7 @@ class EnsembleCoordinator:
         basin_prediction: Optional[Dict] = None
     ) -> Dict:
         """
-        Combine predictions from specialized agents with appropriate weighting.
+        Combine predictions from specialised agents with appropriate weighting.
         
         Args:
             state: Current hurricane state
@@ -120,11 +120,11 @@ class EnsembleCoordinator:
             abs_lat = abs(current_lat)
             
             if current_wind < 60:  # Developing stage
-                # Emphasize intensity more for developing storms
+                # Emphasise intensity more for developing storms
                 traj_weight *= 0.8
                 inten_weight *= 1.2
             elif abs_lat > 30:  # Higher latitude, likely recurving
-                # Emphasize trajectory more for recurving storms
+                # Emphasise trajectory more for recurving storms
                 traj_weight *= 1.2
                 inten_weight *= 0.8
             elif current_wind > 120:  # Major hurricane stage
@@ -132,7 +132,7 @@ class EnsembleCoordinator:
                 traj_weight *= 1.1
                 inten_weight *= 0.9
         
-        # Re-normalize weights if basin prediction is not available
+        # Re-normalise weights if basin prediction is not available
         if basin_prediction is None:
             total = traj_weight + inten_weight
             traj_weight /= total
@@ -144,7 +144,7 @@ class EnsembleCoordinator:
             # Adjust basin weight by confidence
             basin_weight *= basin_confidence
             
-            # Re-normalize with adjusted basin weight
+            # Re-normalise with adjusted basin weight
             total = traj_weight + inten_weight + basin_weight
             if total > 0:
                 traj_weight /= total
@@ -237,7 +237,7 @@ class EnsembleCoordinator:
     
     def train(self, environment, episodes=100):
         """
-        Train all specialized agents in the ensemble.
+        Train all specialised agents in the ensemble.
         
         Args:
             environment: The hurricane environment for training

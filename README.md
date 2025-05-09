@@ -14,7 +14,7 @@ This project uses deep reinforcement learning to predict hurricane and severe st
 - Basin-specific pattern recognition
 - Sea surface temperature and environmental factor integration
 - Uncertainty estimation with confidence levels
-- Interactive visualization dashboard
+- Interactive visualisation dashboard
 
 ## Agent Architecture
 
@@ -31,12 +31,12 @@ The original implementation uses a unified reinforcement learning agent that han
 
 ### Multi-Agent Ensemble Approach
 
-The enhanced implementation divides the hurricane prediction task into specialized agents:
+The enhanced implementation divides the hurricane prediction task into specialised agents:
 
 1. **Trajectory Agent**: Focused solely on predicting storm motion and path
-   - Specializes in understanding atmospheric steering currents
+   - Specialises in understanding atmospheric steering currents
    - Learns basin-specific movement patterns (e.g., Atlantic recurvature)
-   - Optimized for position accuracy metrics
+   - Optimised for position accuracy metrics
 
 2. **Intensity Agent**: Dedicated to wind speed and pressure prediction
    - Focuses on sea surface temperature relationships
@@ -47,7 +47,7 @@ The enhanced implementation divides the hurricane prediction task into specializ
    - North Atlantic (NA) specialist
    - Western Pacific (WP) specialist
    - Eastern Pacific (EP) specialist
-   - Each optimized for regional patterns and characteristics
+   - Each optimised for regional patterns and characteristics
 
 4. **Ensemble Coordinator**: Combines predictions with dynamic weighting
    - Weights agent outputs based on confidence and storm characteristics

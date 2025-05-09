@@ -70,7 +70,7 @@ async def parse_ibtracs_data(data: bytes) -> List[Dict]:
 
 def process_ibtracs_records(records: List[Dict]) -> List[Dict]:
     """
-    Processes raw IBTrACS records into standardized hurricane data.
+    Processes raw IBTrACS records into standardised hurricane data.
     
     Args:
         records: Raw IBTrACS records
@@ -122,7 +122,7 @@ def process_ibtracs_records(records: List[Dict]) -> List[Dict]:
             'wind_speed': record['USA_WIND'] * 1.15078 if record['USA_WIND'] is not None else None,
             # Pressure in millibars/hPa
             'pressure': record['USA_PRES'],
-            # Storm status (may need normalization)
+            # Storm status (may need normalisation)
             'status': record.get('USA_STATUS') or record.get('NATURE'),
             # Record time
             'timestamp': timestamp,
@@ -174,7 +174,7 @@ def process_ibtracs_records(records: List[Dict]) -> List[Dict]:
     for hurricane in processed_hurricanes:
         unique_id = hurricane['id']
         
-        # Check if we've seen this ID before
+        # Check if I've seen this ID before
         if unique_id in unique_id_map:
             unique_id_map[unique_id] += 1
             unique_id = f"{hurricane['id']}-{unique_id_map[unique_id]}"

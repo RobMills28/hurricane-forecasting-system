@@ -1,7 +1,7 @@
 """
 Base Agent for Hurricane Prediction
 
-This module provides the base agent class that all specialized hurricane agents will extend.
+This module provides the base agent class that all specialised hurricane agents will extend.
 """
 
 import numpy as np
@@ -21,7 +21,7 @@ class ReplayBuffer:
     """Experience replay buffer for DQN training."""
     
     def __init__(self, capacity=10000):
-        """Initialize replay buffer with given capacity."""
+        """Initialise replay buffer with given capacity."""
         self.buffer = deque(maxlen=capacity)
     
     def add(self, state, action, reward, next_state, done):
@@ -49,10 +49,10 @@ class QNetwork(nn.Module):
     """Neural network for Q-function approximation."""
     
     def __init__(self, state_dim, action_dim):
-        """Initialize network with given dimensions."""
+        """Initialise network with given dimensions."""
         super(QNetwork, self).__init__()
         
-        # Deeper network architecture with dropout for regularization
+        # Deeper network architecture with dropout for regularisation
         self.fc1 = nn.Linear(state_dim, 128)
         self.dropout1 = nn.Dropout(0.2)
         self.fc2 = nn.Linear(128, 256)  # Wider middle layer
@@ -60,7 +60,7 @@ class QNetwork(nn.Module):
         self.fc3 = nn.Linear(256, 128)  # Additional layer
         self.fc4 = nn.Linear(128, action_dim)
         
-        # Initialize weights with Xavier initialization
+        # Initialise weights with Xavier initialisation
         nn.init.xavier_uniform_(self.fc1.weight)
         nn.init.xavier_uniform_(self.fc2.weight)
         nn.init.xavier_uniform_(self.fc3.weight)
@@ -80,7 +80,7 @@ class BaseAgent:
     
     def __init__(self, options: Dict = None):
         """
-        Initialize the base agent with configuration options.
+        Initialise the base agent with configuration options.
         
         Args:
             options: Configuration options for the agent
@@ -89,7 +89,7 @@ class BaseAgent:
         self.options = {
             "use_basin_models": True,       # Use basin-specific models
             "ensemble_size": 5,             # Number of sub-models in ensemble
-            "learning_rate": 0.001,         # Learning rate for optimizer
+            "learning_rate": 0.001,         # Learning rate for optimiser
             "gamma": 0.99,                  # Discount factor
             "epsilon_start": 1.0,           # Initial exploration rate
             "epsilon_end": 0.05,            # Final exploration rate
@@ -106,26 +106,26 @@ class BaseAgent:
         if options:
             self.options.update(options)
         
-        # Initialize device
+        # Initialise device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Initialize exploration rate
+        # Initialise exploration rate
         self.epsilon = self.options["epsilon_start"]
         
-        # Initialize step counter
+        # Initialise step counter
         self.steps = 0
         
-        # Initialize replay buffer
+        # Initialise replay buffer
         self.replay_buffer = ReplayBuffer(self.options["buffer_size"])
         
-        # Initialize Q-networks (online and target)
+        # Initialise Q-networks (online and target)
         self.q_network = QNetwork(self.options["state_dim"], self.options["action_dim"]).to(self.device)
         self.target_network = QNetwork(self.options["state_dim"], self.options["action_dim"]).to(self.device)
         self.target_network.load_state_dict(self.q_network.state_dict())
         self.target_network.eval()
         
-        # Initialize optimizer
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.options["learning_rate"])
+        # Initialise optimiser
+        self.optimiser = optim.Adam(self.q_network.parameters(), lr=self.options["learning_rate"])
         
         # Basin-specific models
         self.basin_models = {
@@ -138,17 +138,17 @@ class BaseAgent:
             "DEFAULT": self._create_basin_model()  # Default model
         }
         
-        # Initialize basin-specific movement patterns
-        self._initialize_basin_patterns()
+        # Initialise basin-specific movement patterns
+        self._initialise_basin_patterns()
         
         # Performance tracking
         self.training_performance = []
         
         # Ensemble models
-        self.ensemble_members = self._initialize_ensemble()
+        self.ensemble_members = self._initialise_ensemble()
     
-    def _initialize_basin_patterns(self):
-        """Initialize basin-specific movement patterns."""
+    def _initialise_basin_patterns(self):
+        """Initialise basin-specific movement patterns."""
         self.basin_patterns = {
             "NA": {  # North Atlantic
                 "early_lat_change": 0.15,  # Movement northward early
@@ -191,17 +191,17 @@ class BaseAgent:
         target_network.load_state_dict(q_network.state_dict())
         target_network.eval()
         
-        optimizer = optim.Adam(q_network.parameters(), lr=self.options["learning_rate"])
+        optimiser = optim.Adam(q_network.parameters(), lr=self.options["learning_rate"])
         
         return {
             "q_network": q_network,
             "target_network": target_network,
-            "optimizer": optimizer,
+            "optimiser": optimiser,
             "steps": 0
         }
     
-    def _initialize_ensemble(self):
-        """Initialize ensemble models with slight variations."""
+    def _initialise_ensemble(self):
+        """Initialise ensemble models with slight variations."""
         ensemble = []
         
         for i in range(self.options["ensemble_size"]):
@@ -215,12 +215,12 @@ class BaseAgent:
             target_network.load_state_dict(q_network.state_dict())
             target_network.eval()
             
-            optimizer = optim.Adam(q_network.parameters(), lr=lr)
+            optimiser = optim.Adam(q_network.parameters(), lr=lr)
             
             ensemble.append({
                 "q_network": q_network,
                 "target_network": target_network,
-                "optimizer": optimizer,
+                "optimiser": optimiser,
                 "steps": 0,
                 "epsilon": self.options["epsilon_start"] * (1 + (random.random() * 0.2 - 0.1)),
                 "buffer": ReplayBuffer(self.options["buffer_size"] // 2)  # Smaller buffer
@@ -240,8 +240,8 @@ class BaseAgent:
         # Get sea surface temperature
         sst = state.get("sea_surface_temp", {}).get("value", 28)
         
-        # Time step (normalize)
-        time_step = state.get("time_step", 0) / 20  # Normalize
+        # Time step (normalise)
+        time_step = state.get("time_step", 0) / 20  # Normalise
         
         # Basin one-hot encoding (6 basins)
         basin = state.get("basin", "DEFAULT")
@@ -249,12 +249,12 @@ class BaseAgent:
         basin_idx = {"NA": 0, "EP": 1, "WP": 2, "NI": 3, "SI": 4, "SP": 5}.get(basin, 0)
         basin_encoding[basin_idx] = 1
         
-        # Normalize features
-        lat_norm = lat / 90.0  # Normalize latitude
-        lon_norm = lon / 180.0  # Normalize longitude
-        wind_speed_norm = wind_speed / 200.0  # Normalize wind speed
-        pressure_norm = (pressure - 880) / (1020 - 880)  # Normalize pressure
-        sst_norm = (sst - 20) / (32 - 20)  # Normalize SST
+        # Normalise features
+        lat_norm = lat / 90.0  # Normalise latitude
+        lon_norm = lon / 180.0  # Normalise longitude
+        wind_speed_norm = wind_speed / 200.0  # Normalise wind speed
+        pressure_norm = (pressure - 880) / (1020 - 880)  # Normalise pressure
+        sst_norm = (sst - 20) / (32 - 20)  # Normalise SST
         
         # Create state vector
         state_vector = [
@@ -277,8 +277,8 @@ class BaseAgent:
         Returns:
             Prediction dictionary with position, wind speed, and pressure
         """
-        # This method should be overridden by specialized agents
-        raise NotImplementedError("Predict method must be implemented by specialized agents")
+        # I should override this method with specialised agents
+        raise NotImplementedError("Predict method must be implemented by specialised agents")
     
     def update(self, state, action, reward, next_state, done):
         """
@@ -294,7 +294,7 @@ class BaseAgent:
         # Add experience to replay buffer
         self.replay_buffer.add(state, action, reward, next_state, done)
         
-        # Only update if we have enough samples
+        # Only update if I have enough samples
         if len(self.replay_buffer) < self.options["batch_size"]:
             return
         
@@ -326,10 +326,10 @@ class BaseAgent:
         # Compute loss
         loss = F.smooth_l1_loss(current_q_values, target_q_values.unsqueeze(1))
         
-        # Optimize
-        self.optimizer.zero_grad()
+        # Optimise
+        self.optimiser.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        self.optimiser.step()
         
         # Update target network periodically
         if self.steps % self.options["target_update_frequency"] == 0:
@@ -337,13 +337,13 @@ class BaseAgent:
     
     def _action_to_prediction(self, action_idx, state):
         """Convert discrete action index to continuous prediction."""
-        # This method would be overridden by specialized agents
-        raise NotImplementedError("_action_to_prediction must be implemented by specialized agents")
+        # This method would be overridden by specialised agents
+        raise NotImplementedError("_action_to_prediction must be implemented by specialised agents")
     
     def _prediction_to_action(self, prediction):
         """Convert continuous prediction back to discrete action index."""
-        # This method would be overridden by specialized agents
-        raise NotImplementedError("_prediction_to_action must be implemented by specialized agents")
+        # This method would be overridden by specialised agents
+        raise NotImplementedError("_prediction_to_action must be implemented by specialised agents")
     
     def calculate_sst_effect(self, sst: float) -> float:
         """Calculate the effect of sea surface temperature on intensification."""
@@ -364,7 +364,7 @@ class BaseAgent:
     
     def calculate_latitude_effect(self, latitude: float, basin: str) -> float:
         """Calculate the effect of latitude on hurricane behavior."""
-        # Normalize latitude effect based on basin
+        # Normalise latitude effect based on basin
         abs_lat = abs(latitude)
         
         lat_threshold = 30  # Default

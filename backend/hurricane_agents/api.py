@@ -28,7 +28,7 @@ logger = logging.getLogger("hurricane_agents.api")
 # Configuration for agent selection
 USE_MULTI_AGENT = True  # Set to False to use the single agent
 
-# Import our hurricane agents components
+# Import hurricane agents components
 from .environment import HurricaneEnvironment
 from .data import fetch_historical_hurricane_data, preprocess_data_for_training
 
@@ -59,25 +59,25 @@ app = FastAPI(title="Hurricane Prediction API")
 # Add CORS middleware to allow requests from the frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your frontend's origin
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Store trained agents in memory (in production, you'd use a persistent store)
+# Store trained agents in memory
 trained_agents = {}
 environments = {}
 training_tasks = {}
 
-# Create and initialize a default hurricane prediction agent on startup
+# Create and initialise a default hurricane prediction agent on startup
 @app.on_event("startup")
 async def startup_event():
     # Create default agent if it doesn't exist
     if "default-hurricane-agent" not in trained_agents:
         logger.info("Creating default hurricane prediction agent")
         try:
-            # Initialize agent (either single or multi-agent based on config)
+            # Initialise agent (either single or multi-agent based on config)
             agent = PredictionAgent()
 
             
@@ -145,7 +145,7 @@ async def train_agent_task(agent_id: str, options: Dict[str, Any]):
         
         # Create environment
         environment = HurricaneEnvironment()
-        await environment.initialize(processed_data, {})
+        await environment.initialise(processed_data, {})
         environments[agent_id] = environment
         
         # Create agent
@@ -243,7 +243,7 @@ async def train_agent(options: TrainingOptions, background_tasks: BackgroundTask
             "progress": training_tasks[agent_id]["progress"]
         }
     
-    # Initialize training task
+    # Initialise training task
     training_tasks[agent_id] = {
         "status": "starting",
         "progress": 0,
@@ -601,8 +601,6 @@ async def get_global_storms(region: str = "GLOBAL"):
 # Helper functions for the storm_data endpoint
 async def get_storm_observations(lat, lon, data_source, basin):
     """Get observations from appropriate weather data source."""
-    # For now, just return simulated data
-    # In a complete implementation, this would call external APIs
     return {
         "timestamp": "2025-04-15T00:00:00Z",
         "temperature": 28.5,
@@ -639,7 +637,7 @@ def generate_forecast_points(prediction, current_state):
         if hour == 0:
             position = current_position
         else:
-            # Simple linear interpolation - in reality would be more complex
+            # Simple linear interpolation
             factor = min(1.0, hour / 24)  # Cap at 1.0 (24 hours)
             lat = current_position.get("lat", 0) + (
                 (predicted_position.get("lat", 0) - current_position.get("lat", 0)) * factor
@@ -705,14 +703,14 @@ def get_satellite_imagery(lat, lon):
     """Get satellite imagery for the specified location."""
     # Simulated satellite imagery data
     return {
-        "url": None,  # Would be a real image URL in production
+        "url": None,
         "date": "2025-04-15",
         "resolution": "250m"
     }
 
 def generate_historical_data():
     """Generate historical data for the storm."""
-    # For now, return simulated data
+    # Return simulated data
     history = []
     for i in range(-168, 0, 6):
         history.append({
@@ -727,8 +725,7 @@ async def get_global_environmental_data():
     Fetch global environmental data relevant for storm formation prediction.
     """
     try:
-        # In a full implementation, this would call external APIs or services
-        # For now, return simulated environmental data
+        # Return simulated environmental data
         return {
             "sea_surface_temps": {
                 "atlantic": 28.5,
@@ -760,7 +757,6 @@ def predict_potential_storm_areas(environmental_data):
     try:
         logger.info("Using RL agent to predict potential storm formations")
         
-        # Use the new implementation that properly uses the agent
         return generate_storm_formation_predictions(environmental_data)
     except Exception as e:
         logger.error(f"Error predicting storm areas: {e}")
@@ -1043,7 +1039,7 @@ def generate_storm_formation_predictions(environmental_data):
                     "intensity": "TD"  # Default to tropical depression
                 })
         
-    # Filter to avoid too many points - prioritize high probability
+    # Filter to avoid too many points - prioritise high probability
     potential_areas.sort(key=lambda x: x["probability"], reverse=True)
     return potential_areas[:15]  # Return top 15 most likely formation areas (increased from 10)
 

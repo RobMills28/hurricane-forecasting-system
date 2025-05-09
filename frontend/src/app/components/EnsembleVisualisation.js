@@ -12,7 +12,7 @@ const safeNumber = (value, fallback = 0) => {
   return typeof value === 'number' && !isNaN(value) ? value : fallback;
 };
 
-const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics }) => {
+const EnsembleVisualisation = ({ predictions, ensemblePredictions, statistics }) => {
   const [showEnsemble, setShowEnsemble] = useState(true);
   const [showUncertainty, setShowUncertainty] = useState(true);
   
@@ -30,7 +30,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
       const stats = safeStatistics[day] || {};
       const windSpeed = safeNumber(pred.windSpeed, 0);
       
-      // Make sure we have valid numbers for all values
+      // Make sure I have valid numbers for all values
       const low = safeNumber(stats.intensity?.range?.[0], windSpeed * 0.8);
       const high = safeNumber(stats.intensity?.range?.[1], windSpeed * 1.2);
       const confidence = safeNumber(stats.confidence, 50);
@@ -46,11 +46,11 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
     });
   };
   
-  // Format ensemble data for visualization
+  // Format ensemble data for visualisation
   const prepareEnsembleData = () => {
     if (!safeEnsemblePredictions.length) return [];
     
-    // Flatten ensemble tracks for visualization
+    // Flatten ensemble tracks for visualisation
     const flatData = [];
     
     safeEnsemblePredictions.forEach((ensemble, ensembleIndex) => {
@@ -108,7 +108,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
     });
   };
   
-  // Prepare confidence visualization
+  // Prepare confidence visualisation
   const prepareConfidenceData = () => {
     if (!safeStatistics || typeof safeStatistics !== 'object') return [];
     
@@ -278,7 +278,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
         </div>
       </div>
       
-      {/* Hurricane Categories Visualization */}
+      {/* Hurricane Categories Visualisation */}
       <div className="mt-4">
         <h4 className="text-sm font-bold mb-2">Hurricane Category Forecast</h4>
         <div className="grid grid-cols-5 gap-1 mb-2">
@@ -303,7 +303,7 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
         </div>
       </div>
       
-      {/* Forecast Confidence Visualization */}
+      {/* Forecast Confidence Visualisation */}
       {confidenceData.length > 0 && (
         <div className="mt-4">
           <h4 className="text-sm font-bold mb-2">Forecast Confidence</h4>
@@ -361,4 +361,4 @@ const EnsembleVisualization = ({ predictions, ensemblePredictions, statistics })
   );
 };
 
-export default EnsembleVisualization;
+export default EnsembleVisualisation;

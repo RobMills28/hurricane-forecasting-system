@@ -1,7 +1,7 @@
 """
 Basin-Specific Agent for Hurricane Prediction
 
-This agent specializes in a specific ocean basin's hurricane patterns.
+This agent specialises in a specific ocean basin's hurricane patterns.
 """
 
 import torch
@@ -13,11 +13,11 @@ from typing import Dict, List
 from .base_agent import BaseAgent
 
 class BasinSpecificAgent(BaseAgent):
-    """Agent specialized for a specific ocean basin."""
+    """Agent specialised for a specific ocean basin."""
     
     def __init__(self, basin: str, options: Dict = None):
         """
-        Initialize the basin-specific agent.
+        Initialise the basin-specific agent.
         
         Args:
             basin: Ocean basin code (NA, WP, etc.)
@@ -34,7 +34,7 @@ class BasinSpecificAgent(BaseAgent):
         if options:
             basin_options.update(options)
         
-        # Initialize base agent
+        # Initialise base agent
         super().__init__(basin_options)
         
         # Store target basin
@@ -75,7 +75,7 @@ class BasinSpecificAgent(BaseAgent):
         basin = state.get("basin", "DEFAULT")
         if basin != self.target_basin and training is False:
             # This is not this agent's specialty, return a minimal prediction
-            # Ensemble will ignore or minimize this agent's contribution
+            # Ensemble will ignore or minimise this agent's contribution
             return {
                 "position": state.get("position", {}),
                 "wind_speed": state.get("wind_speed", 0),
@@ -154,7 +154,7 @@ class BasinSpecificAgent(BaseAgent):
         current_pressure = state.get("pressure", 1010)
         
         # Decode action - similar to original agent but with basin-specific adjustments
-        # We have 15 actions: 5 latitude x 3 longitude changes
+        # Here I have 15 actions: 5 latitude x 3 longitude changes
         lat_action = action_idx // 3  # 0-4
         lon_action = (action_idx % 3)  # 0-2
         
@@ -227,7 +227,7 @@ class BasinSpecificAgent(BaseAgent):
         lat_change = position.get("lat", 0) - position.get("lat_prev", 0)
         lon_change = position.get("lon", 0) - position.get("lon_prev", 0)
         
-        # Discretize lat change
+        # Discretise lat change
         if lat_change <= -0.75:
             lat_action = 0  # Large negative
         elif lat_change <= -0.25:
@@ -239,7 +239,7 @@ class BasinSpecificAgent(BaseAgent):
         else:
             lat_action = 4  # Large positive
         
-        # Discretize lon change
+        # Discretise lon change
         if lon_change <= -0.25:
             lon_action = 0  # Negative
         elif lon_change <= 0.25:
