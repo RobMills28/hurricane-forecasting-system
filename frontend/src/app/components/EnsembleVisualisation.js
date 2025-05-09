@@ -93,7 +93,7 @@ const EnsembleVisualisation = ({ predictions, ensemblePredictions, statistics })
       const maxCat = typeof catRange[1] === 'string' ? catRange[1] : String(catRange[1] || '0');
       const category = pred.category || 'TS';
       
-      // Define category colors
+      // Define category colours
       const catInfo = categories[category] || categories['TS'];
         
       return {

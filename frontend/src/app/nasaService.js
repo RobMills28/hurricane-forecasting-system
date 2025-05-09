@@ -3,7 +3,7 @@
 // nasaService.js
 // Service to handle NASA API interactions
 
-const NASA_API_KEY = 'DEMO_KEY'; // Replace with your NASA API key for production use
+const NASA_API_KEY = 'DEMO_KEY'; // I need an actual NASA API key for this to work properly
 const NASA_API_BASE_URL = 'https://api.nasa.gov/planetary/earth';
 
 // Simple cache for imagery requests
@@ -101,7 +101,6 @@ export async function getGibsLayers() {
     }
     
     // NASA GIBS doesn't have a direct API to list layers, so I'll return a curated list
-    // In a production app, you might fetch this from a more dynamic source
     const layers = [
       {
         id: 'MODIS_Terra_CorrectedReflectance_TrueColor',
@@ -205,7 +204,7 @@ export function getGibsUrlTemplate(layer) {
  */
 
 const BASE_URL = 'https://api.weather.gov';
-const USER_AGENT = 'Atlas Command Center (your-email@domain.com)';
+const USER_AGENT = 'Atlas Command Center';
 
 // Cache for active alerts
 let alertsCache = null;
@@ -416,7 +415,7 @@ function extractCoordinates(geometry) {
 }
 
 /**
- * Calculates center point of a polygon
+ * Calculates centre point of a polygon
  */
 function getCenterOfPolygon(coordinates) {
   const count = coordinates.length;
@@ -524,7 +523,7 @@ function processObservations(obs) {
 }
 
 /**
- * Get color coding for different event types
+ * Get colour coding for different event types
  */
 export function getEventColor(event) {
   const eventType = event.toLowerCase();
@@ -540,8 +539,7 @@ export function getEventColor(event) {
  * Get historical data for a hurricane (simulated for demo)
  */
 export function getHurricaneHistoricalData(hurricaneId, days = 7) {
-  // In a real implementation, this would fetch from an API
-  // For demo purposes, generate realistic mock data
+  // For demo purposes, I am generating realistic mock data
   
   const history = [];
   const now = new Date();

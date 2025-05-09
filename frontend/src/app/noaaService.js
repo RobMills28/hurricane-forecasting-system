@@ -6,7 +6,7 @@
  */
 
 const BASE_URL = 'https://api.weather.gov';
-const USER_AGENT = 'Atlas Command Center (robmills2000@hotmail.com)';
+const USER_AGENT = 'Atlas Command Center';
 
 /**
  * Fetches active severe weather events including hurricanes
@@ -81,7 +81,7 @@ function getEventName(properties) {
     return stormMatch[1] || stormMatch[2];
   }
 
-  // For other events, use the event type and location
+  // For other events, the system uses the event type and location
   return `${properties.event} - ${properties.areaDesc.split(';')[0]}`;
 }
 
@@ -183,13 +183,13 @@ export async function getHurricaneObservations(lat, lon) {
     if (!stationResponse.ok) {
       console.warn(`Station fetch failed: ${stationResponse.status} ${stationResponse.statusText}`);
       
-      // Try an alternative endpoint or approach if the main one fails
+      // If the main endpoint fails, the system will try an alternative endpoint or approach
       // If lat/lon is in US, try a secondary endpoint or static list of reliable stations
       if (isInUnitedStates(lat, lon)) {
         // For US locations, I could try a hardcoded reliable station nearby
         return await tryBackupUSStation(lat, lon);
       } else {
-        // If outside US, try OpenMeteo as an alternative source
+        // If outside US, the system uses OpenMeteo as an alternative source
         // This will maintain consistent global coverage
         return await getOpenMeteoObservations(lat, lon, determineRegionFromCoords(lat, lon));
       }
@@ -220,7 +220,7 @@ export async function getHurricaneObservations(lat, lon) {
 
     if (!obsResponse.ok) {
       console.warn(`Failed to fetch observations: ${obsResponse.status} ${obsResponse.statusText}`);
-      // If station data fetch fails, fall back to OpenMeteo for this location
+      // If station data fetch fails, the system falls back to OpenMeteo for this location
       return await getOpenMeteoObservations(lat, lon, determineRegionFromCoords(lat, lon));
     }
     
@@ -294,7 +294,7 @@ async function tryBackupUSStation(lat, lon) {
     const data = await response.json();
     return processObservations(data.properties);
   } catch (error) {
-    // If all else fails, use OpenMeteo
+    // If all else fails, the system will use OpenMeteo
     return await getOpenMeteoObservations(lat, lon, determineRegionFromCoords(lat, lon));
   }
 }
@@ -319,7 +319,7 @@ function processObservations(obs) {
 }
 
 /**
- * Get color coding for different event types
+ * Get colour coding for different event types
  */
 export function getEventColor(event) {
   const eventType = event.toLowerCase();

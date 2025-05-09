@@ -385,7 +385,7 @@ const fetchStormDataFromPython = async (hurricane) => {
 
   console.log("Sending request to Python with data:", requestData);
   
-  // Call Python API endpoint (you'll need to create this endpoint)
+  // Call Python API endpoint
   const response = await fetch('http://localhost:8000/storm_data', {
     method: 'POST',
     headers: {
@@ -422,7 +422,7 @@ const fetchPotentialStormAreas = async () => {
     
     // Fallback to simulated data if the API fails
     return [
-      // These are placeholders - your Python backend would generate the actual locations
+      // These are placeholders - the Python backend should generate the actual locations
       { id: 'pot1', position: [15.0, -40.0], probability: 0.7, basin: 'NA', intensity: 'TS' },
       { id: 'pot2', position: [12.0, 145.0], probability: 0.5, basin: 'WP', intensity: 'TD' },
       { id: 'pot3', position: [18.0, -110.0], probability: 0.4, basin: 'EP', intensity: 'TS' },

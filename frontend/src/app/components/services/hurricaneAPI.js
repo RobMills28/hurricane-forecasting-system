@@ -4,7 +4,7 @@
  * This module provides functions to interact with the Python hurricane prediction backend.
  */
 
-// Base URL for the API - adjust based on your deployment
+// Base URL for the API
 const API_BASE_URL = process.env.NEXT_PUBLIC_HURRICANE_API_URL || 'http://localhost:8000';
 
 /**

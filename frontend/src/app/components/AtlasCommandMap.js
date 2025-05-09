@@ -333,7 +333,7 @@ const preloadImage = (url) => {
     }
   };  
     
-  // Get hurricane color based on category and storm type
+  // Get hurricane colour based on category and storm type
   const getHurricaneColor = (hurricane) => {
     // Check for storm type first
     if (hurricane.type === 'Winter Storm') {
@@ -348,7 +348,7 @@ const preloadImage = (url) => {
       return '#6495ED'; // Cornflower blue for severe storms
     }
     
-    // For tropical systems, color by category
+    // For tropical systems, colour by category
     const category = hurricane.category || 0;
     
     const colors = {
@@ -434,7 +434,7 @@ const preloadImage = (url) => {
     
     // Generate forecast points (5 days)
     for (let i = 1; i <= 5; i++) {
-      // Add some randomness to make the path look more realistic
+      // Here I am adding some randomness to make the path look more realistic
       const jitter = (Math.random() - 0.5) * 0.3;
       
       // Curve factor increases with each step
@@ -735,14 +735,14 @@ const preloadImage = (url) => {
           <CircleMarker
             key={`potential-${area.id}`}
             center={[area.position[0], area.position[1]]}
-            radius={12} // Make them larger, like in your screenshot
+            radius={12} // These are larger than the other dots - to make it more clear that they are potential areas
             pathOptions={{
               color: '#ffffff',
               weight: 1,
               fillColor: area.probability > 0.6 ? '#FF5050' : 
                         area.probability > 0.4 ? '#FF9933' : '#FFDE33',
               fillOpacity: (animationFrame % 60) < 30 ? 0.4 : 0.8,
-              className: 'animate-pulse' // Add pulse animation if you have Tailwind
+              className: 'animate-pulse' // Here I am using the animation class to make it pulse
             }}
           >
             <Tooltip

@@ -267,7 +267,7 @@ export async function getRegionalForecast(latitude, longitude, region = 'GLOBAL'
     
     const data = await response.json();
     
-    // Process the data to match your internal structures
+    // Process the data to match the internal structures
     const processedData = processOpenMeteoData(data, region);
     
     // Cache the result both in memory and localStorage
@@ -675,7 +675,7 @@ function determineBasin(regionOrCoords) {
 }
 
 /**
- * Generate a name for a storm based on type and region
+ * Here the system is generating a name for a storm based on type and region
  * @param {string} stormType - Type of storm (Hurricane, Typhoon, etc.)
  * @param {string} stormId - Unique identifier for the storm
  * @param {string} region - Region/basin code
@@ -797,7 +797,7 @@ function formatStormAsHurricane(storm, hotspot, regionCode) {
   // Generate name with hotspot for better location information
   const name = generateStormName(storm.type, storm.id, regionCode, hotspot);
   
-  // Map from Open-Meteo format to your application's hurricane format
+  // Map from Open-Meteo format to the application's hurricane format
   return {
     id: storm.id,
     name: name,

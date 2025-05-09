@@ -13,7 +13,7 @@ export default function NOAATest() {
         setLoading(true);
         const response = await fetch('https://api.weather.gov/alerts/active', {
           headers: {
-            'User-Agent': 'Atlas Command Center Test (your-email@domain.com)'
+            'User-Agent': 'Atlas Command Center Test'
           }
         });
         

@@ -46,30 +46,24 @@ body {
   color: white;
 }
 
-/* Add this to your globals.css */
 
-/* Target specifically the side panels with "Map data not available" text */
 .leaflet-tile-container img {
   background-color: transparent;
 }
 
-/* Add this to handle empty areas and sides */
 .leaflet-container {
   background-color: #0d1424 !important;
 }
 
-/* Remove "Map data not available" text */
 .leaflet-tile-pane .leaflet-layer:nth-child(2) .leaflet-tile {
   color: transparent !important;
 }
 
-/* Style only error tiles with blue background */
 .leaflet-tile-error {
   background-color: #0B4066 !important;
   color: transparent !important;
 }
 
-/* Handle the "Map data not available" text */
 .leaflet-container [class*="leaflet-tile-container"] > div {
   color: transparent !important;
 }
